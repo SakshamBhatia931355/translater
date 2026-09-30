@@ -1,0 +1,12 @@
+torch>=2.2
+torchvision>=0.17
+opencv-python>=4.9
+scikit-learn>=1.4
+matplotlib>=3.8
+numpy>=1.26
+pillow>=10.2
+tqdm>=4.66
+pyttsx3>=2.99
+Flask>=3.0,<4
+transformers>=4.45,<5
+sentencepiece>=0.2

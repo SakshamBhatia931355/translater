@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#d94f83">
+  <title>Sakura Kana</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='mobile.css') }}">
+  <script src="{{ url_for('static', filename='mobile.js') }}" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header><div class="brand"><span aria-hidden="true">✿</span><h1>Sakura Kana</h1></div>
+      <p>Read Japanese, build a phrase, and hear what it means.</p></header>
+
+    <section class="card camera-card" aria-labelledby="camera-heading">
+      <h2 id="camera-heading">1 · Take or choose a photo</h2>
+      <p class="hint">Write separated hiragana in dark ink on light paper, then center it in the frame.</p>
+      <label class="button primary upload-button">Take photo / choose image
+        <input id="photo" type="file" accept="image/*" capture="environment">
+      </label>
+      <img id="preview" alt="Selected handwriting preview" hidden>
+      <button id="recognize" class="button" disabled>Read the kana</button>
+      <p id="status" class="status" role="status" aria-live="polite">Choose a photo to begin.</p>
+    </section>
+
+    <section class="card" aria-labelledby="read-heading">
+      <h2 id="read-heading">2 · Check the reading</h2>
+      <div id="readings" class="readings hint">Your kana guesses will appear here.</div>
+      <label for="japanese">Japanese text · tap to correct</label>
+      <input id="japanese" class="text-input japanese" type="text" lang="ja" autocomplete="off" placeholder="Recognized kana">
+      <div class="actions"><button id="add" class="button" disabled>Add to phrase</button><button id="translate-line" class="button primary">Translate this line</button></div>
+    </section>
+
+    <section class="card" aria-labelledby="phrase-heading">
+      <h2 id="phrase-heading">3 · Make it a phrase</h2>
+      <p class="hint">Captured kana</p><p id="phrase" class="phrase">(empty)</p>
+      <div class="actions"><button id="translate-phrase" class="button primary">Translate phrase</button><button id="undo" class="button">Undo</button><button id="clear" class="button">Clear</button></div>
+      <hr><p class="hint">English meaning</p><p id="english" class="english">Translation will appear here.</p>
+      <button id="speak" class="button">Speak English</button>
+    </section>
+    <footer>Mobile page uses this PC’s local model. Keep the PC and phone on the same Wi-Fi.</footer>
+  </main>
+</body>
+</html>
