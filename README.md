@@ -4,22 +4,34 @@ This Windows desktop app recognizes handwritten hiragana from a webcam or an upl
 
 This is handwritten Japanese character recognition, not sign-language recognition. The camera classifier predicts one hiragana at a time. A single kana such as お has a sound (o) rather than a standalone English word; English translation needs a meaningful captured word or phrase.
 
-## Setup
+## Set up on another Windows PC
 
-Open PowerShell:
+The repository includes the trained kana checkpoints, installable Android debug APK, and Japanese-to-English model. Git LFS downloads the translation weights when you clone. The Python environment is created locally for that PC and is not copied from this computer. The translation model is distributed under Apache-2.0 by [Helsinki-NLP](https://huggingface.co/Helsinki-NLP/opus-mt-ja-en).
 
-    cd C:\Users\sam93\Downloads\translater
-    .\.venv\Scripts\Activate.ps1
-    python -m pip install -r requirements.txt
-    python src\setup_translation.py
+Requirements: Windows 10/11, Git, Git LFS, Python 3.12, and an NVIDIA GPU with a compatible driver for CUDA acceleration. Open PowerShell:
 
-The first translation setup downloads the Helsinki-NLP OPUS-MT ja→en model once. Translation runs locally after installation, on the NVIDIA GPU when PyTorch can use CUDA.
+    git lfs install
+    git clone https://github.com/SakshamBhatia931355/translater.git
+    cd translater
+    git lfs pull
+    powershell -ExecutionPolicy Bypass -File .\setup_gpu.ps1
+    .\.venv\Scripts\python.exe src\setup_translation.py
+    .\.venv\Scripts\python.exe src\desktop_app.py
+
+`setup_gpu.ps1` creates `.venv`, installs CUDA-enabled PyTorch and the app dependencies. If the other PC has no compatible NVIDIA GPU, install CPU-only PyTorch with these commands instead:
+
+    py -3.12 -m venv .venv
+    .\.venv\Scripts\python.exe -m pip install --upgrade pip
+    .\.venv\Scripts\python.exe -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+The app then runs without GPU acceleration.
 
 ## App with image upload and webcam
 
 Start the desktop interface:
 
-    python src\desktop_app.py
+    .\.venv\Scripts\python.exe src\desktop_app.py
 
 Choose image opens a file picker and tries to separate a spaced line of kana from the photo. It translates the detected line automatically; edit the Japanese text and select Translate this line to retry the translation. Use Add to phrase when you want to collect kana before translating a longer phrase. The webcam still reads one kana at a time; enter the Camo camera index if needed.
 
@@ -47,9 +59,8 @@ The result is temporally smoothed across camera frames. The ranked alternatives 
 
 The mobile page runs in Chrome on Android while this PC runs the recognition and translation models (including GPU inference when CUDA is available). Connect the phone and PC to the same Wi-Fi, then start the local server in PowerShell:
 
-    cd C:\Users\sam93\Downloads\translater
-    .\.venv\Scripts\Activate.ps1
-    python src\mobile_server.py
+    cd translater
+    .\.venv\Scripts\python.exe src\mobile_server.py
 
 Find the PC's Wi-Fi IPv4 address with `ipconfig`, then open `http://<PC-IPv4-address>:5055` on the phone, for example `http://192.168.1.24:5055`. Tap **Take photo / choose image** to use the Android camera or gallery. Keep the server window open while using the page. The page can recognize a line, lets you correct it, translates the line or built phrase, and uses Android browser speech for **Speak English**.
 
@@ -57,9 +68,9 @@ This is a phone-friendly browser app; the PyTorch model stays on the PC. If Wind
 
 ### Native Android app
 
-The Android Studio project is `android-app`. Open that folder in Android Studio, or build the debug APK from PowerShell:
+The Android Studio project is `android-app`. The ready-to-install debug APK is `artifacts\SakuraKana-debug.apk`. Install it on the phone; the PC still runs the recognizer and translator. To rebuild the APK, open `android-app` in Android Studio or run:
 
-    cd C:\Users\sam93\Downloads\translater\android-app
+    cd android-app
     .\gradlew.bat assembleDebug
 
 The APK is written to `android-app\app\build\outputs\apk\debug\app-debug.apk`. The app can take or choose a photo, draw one kana with blue or black ink, crop the drawing to its ink bounds, send it to the PC recognizer, let you correct the Japanese, add it to a phrase, translate it, and speak the English result. The model still runs on the PC. Start it from the desktop app's **Start phone server** button, then enter the shown PC URL in the Android app and tap **Connect**. Both devices must be on the same local network. This debug app allows HTTP because the local PC server does not use HTTPS; use it only with your own trusted LAN.
@@ -74,7 +85,7 @@ Images are read locally. For best results, use dark ink on light paper and keep 
 
 ## ETL8G handwriting dataset
 
-The ETL Character Database ETL8G archive is stored at datasets\ETL8G\ETL8G.zip. The preparation script checks the published MD5 before converting its official binary records. ETL8G includes 956 classes (881 educational kanji and 75 hiragana), with 152,960 listed samples. This project keeps the hiragana records supported by its reading map; kanji records are not passed to the kana classifier.
+The ETL Character Database ETL8G archive is not included. Download it from the [official AIST ETL8G page](https://etlcdb.db.aist.go.jp/download2/) and place it at `datasets\ETL8G\ETL8G.zip`. The preparation script checks the published MD5 before converting its official binary records. ETL8G includes 956 classes (881 educational kanji and 75 hiragana), with 152,960 listed samples. This project keeps the hiragana records supported by its reading map; kanji records are not passed to the kana classifier. AIST retains copyright and requires distribution through its website, so do not redistribute the archive or prepared image files.
 
 After the verified archive is present, prepare the additional kana images and train:
 
@@ -102,8 +113,4 @@ The database is copyrighted by AIST and may be used for free under its Terms of 
 
 ## Windows executable
 
-The desktop application executable is at dist\KanaReader\KanaReader.exe after building. Rebuild after updating source, checkpoint, or translation weights:
-
-    python -m PyInstaller --noconfirm --clean --onedir --windowed --name KanaReader --add-data "checkpoints\best_model.pt;checkpoints" --add-data "models\opus-mt-ja-en;models\opus-mt-ja-en" --collect-all transformers --collect-all tokenizers --collect-all sentencepiece --hidden-import pyttsx3.drivers.sapi5 --hidden-import comtypes.gen.SpeechLib --hidden-import webcam_app src\desktop_app.py
-
-Keep the _internal folder beside the executable. Run python src\setup_translation.py before building so the translation weights are available.
+The bundled Windows executable is not included because it is several gigabytes and contains a PC-specific CUDA/PyTorch runtime. Run the desktop app from the locally created Python environment as shown above, or build the executable on the target PC after setup. The PyInstaller specifications are included in the repository.

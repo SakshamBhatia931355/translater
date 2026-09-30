@@ -10,6 +10,10 @@ MODEL_DIR = ROOT / "models" / "opus-mt-ja-en"
 
 
 def main() -> None:
+    weight_file = MODEL_DIR / "model.safetensors"
+    if weight_file.is_file() and weight_file.stat().st_size > 1_000_000 and (MODEL_DIR / "config.json").is_file():
+        print(f"Offline Japanese-to-English model is already ready at {MODEL_DIR}.")
+        return
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Downloading {MODEL_ID} to {MODEL_DIR} (one-time setup)...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)

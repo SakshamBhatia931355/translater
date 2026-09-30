@@ -99,7 +99,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         serverField = EditText(this).apply {
             setSingleLine(true)
             textSize = 15f
-            setText("http://192.168.1.6:5055")
+            setText("")
             hint = "http://PC-address:5055"
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = rounded(Color.rgb(255, 251, 253), Color.rgb(240, 214, 225))
@@ -186,7 +186,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun connectToPc() {
         val base = baseUrl()
-        if (base == null) { showStatus("Enter an address like http://192.168.1.6:5055", true); return }
+        if (base == null) { showStatus("Enter the PC address shown by the running server, such as http://192.168.1.24:5055", true); return }
         showStatus("Connecting to the PC…")
         worker.execute {
             try {
