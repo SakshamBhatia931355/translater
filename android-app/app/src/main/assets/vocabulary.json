@@ -1,0 +1,52 @@
+{
+  "N5": [
+    {"word":"水","reading":"みず","meaning":"water"},
+    {"word":"人","reading":"ひと","meaning":"person"},
+    {"word":"食べる","reading":"たべる","meaning":"to eat"},
+    {"word":"今日","reading":"きょう","meaning":"today"},
+    {"word":"学校","reading":"がっこう","meaning":"school"},
+    {"word":"大きい","reading":"おおきい","meaning":"big; large"},
+    {"word":"友達","reading":"ともだち","meaning":"friend"},
+    {"word":"行く","reading":"いく","meaning":"to go"}
+  ],
+  "N4": [
+    {"word":"必要","reading":"ひつよう","meaning":"necessary; needed"},
+    {"word":"安心","reading":"あんしん","meaning":"relief; peace of mind"},
+    {"word":"運転","reading":"うんてん","meaning":"driving; operation"},
+    {"word":"特別","reading":"とくべつ","meaning":"special"},
+    {"word":"準備","reading":"じゅんび","meaning":"preparation"},
+    {"word":"説明","reading":"せつめい","meaning":"explanation"},
+    {"word":"続ける","reading":"つづける","meaning":"to continue"},
+    {"word":"選ぶ","reading":"えらぶ","meaning":"to choose"}
+  ],
+  "N3": [
+    {"word":"経験","reading":"けいけん","meaning":"experience"},
+    {"word":"確認","reading":"かくにん","meaning":"confirmation; checking"},
+    {"word":"原因","reading":"げんいん","meaning":"cause; origin"},
+    {"word":"結果","reading":"けっか","meaning":"result; outcome"},
+    {"word":"影響","reading":"えいきょう","meaning":"influence; effect"},
+    {"word":"関係","reading":"かんけい","meaning":"relationship; connection"},
+    {"word":"増える","reading":"ふえる","meaning":"to increase"},
+    {"word":"比べる","reading":"くらべる","meaning":"to compare"}
+  ],
+  "N2": [
+    {"word":"維持","reading":"いじ","meaning":"maintenance; keeping up"},
+    {"word":"状況","reading":"じょうきょう","meaning":"situation; circumstances"},
+    {"word":"判断","reading":"はんだん","meaning":"judgment; decision"},
+    {"word":"制度","reading":"せいど","meaning":"system; institution"},
+    {"word":"責任","reading":"せきにん","meaning":"responsibility"},
+    {"word":"傾向","reading":"けいこう","meaning":"tendency; trend"},
+    {"word":"防ぐ","reading":"ふせぐ","meaning":"to prevent; to protect against"},
+    {"word":"豊か","reading":"ゆたか","meaning":"abundant; rich"}
+  ],
+  "N1": [
+    {"word":"促進","reading":"そくしん","meaning":"promotion; acceleration"},
+    {"word":"妥当","reading":"だとう","meaning":"valid; appropriate; reasonable"},
+    {"word":"顕著","reading":"けんちょ","meaning":"remarkable; conspicuous"},
+    {"word":"懸念","reading":"けねん","meaning":"concern; apprehension"},
+    {"word":"遂げる","reading":"とげる","meaning":"to accomplish; to achieve"},
+    {"word":"見通し","reading":"みとおし","meaning":"prospect; outlook"},
+    {"word":"根拠","reading":"こんきょ","meaning":"basis; grounds; evidence"},
+    {"word":"著しい","reading":"いちじるしい","meaning":"remarkable; considerable"}
+  ]
+}

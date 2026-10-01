@@ -33,11 +33,23 @@
     </section>
 
     <section class="card" aria-labelledby="phrase-heading">
-      <h2 id="phrase-heading">3 · Make it a phrase</h2>
+      <h2 id="phrase-heading">3 · Translation studio</h2>
+      <p class="hint">Choose what you are translating: a word, phrase, sentence, or the recognized line.</p>
+      <label for="translation-type">Translation type</label>
+      <select id="translation-type" class="text-input type-select"><option value="word">Word</option><option value="phrase" selected>Phrase</option><option value="sentence">Sentence</option><option value="line">Recognized line</option></select>
       <p class="hint">Captured kana</p><p id="phrase" class="phrase">(empty)</p>
       <div class="actions"><button id="translate-phrase" class="button primary">Translate phrase</button><button id="undo" class="button">Undo</button><button id="clear" class="button">Clear</button></div>
       <hr><p class="hint">English meaning</p><p id="english" class="english">Translation will appear here.</p>
       <button id="speak" class="button">Speak English</button>
+    </section>
+    <section class="card" aria-labelledby="vocab-heading">
+      <h2 id="vocab-heading">4 · Learn vocabulary by level</h2>
+      <p class="hint">Try a starter deck of common words at each study level. Cards work offline after the page loads.</p>
+      <label for="vocab-level">JLPT level</label>
+      <select id="vocab-level" class="text-input type-select"><option value="N5">N5 · Beginner</option><option value="N4">N4 · Elementary</option><option value="N3">N3 · Intermediate</option><option value="N2">N2 · Upper intermediate</option><option value="N1">N1 · Advanced</option></select>
+      <div id="vocab-card" class="vocab-card" aria-live="polite"><span id="vocab-level-label" class="vocab-level">N5</span><p id="vocab-word" class="vocab-word"></p><p id="vocab-reading" class="vocab-reading"></p><p id="vocab-meaning" class="vocab-meaning" hidden></p></div>
+      <p id="vocab-progress" class="hint">Card 1</p>
+      <div class="actions"><button id="vocab-reveal" class="button primary">Show meaning</button><button id="vocab-known" class="button">I knew it</button><button id="vocab-next" class="button">Next word</button></div>
     </section>
     <footer>Mobile page uses this PC’s local model. Keep the PC and phone on the same Wi-Fi.</footer>
   </main>

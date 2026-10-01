@@ -1,5 +1,6 @@
 """Small Windows UI for image upload, pronunciation, phrase translation and webcam."""
 import queue
+import json
 import socket
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageDraw, ImageTk
 
-from config import KANA
+from config import KANA, ROOT
 from predict import predict_line
 
 
@@ -119,12 +120,15 @@ class KanaReaderApp:
         phrase_card = ttk.Frame(right, style="Card.TFrame", padding=15)
         phrase_card.pack(fill="both", expand=True)
         ttk.Label(phrase_card, text="2  ·  Make it a phrase", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(phrase_card, text="Translation type", style="CardMuted.TLabel").pack(anchor="w", pady=(7, 0))
+        self.translation_type = tk.StringVar(value="Phrase builder")
+        ttk.Combobox(phrase_card, textvariable=self.translation_type, values=("Word from reading", "Phrase builder", "Sentence from reading", "Recognized line"), state="readonly").pack(fill="x", pady=(3, 8))
         self.phrase_text = tk.StringVar(value="(empty)")
         ttk.Label(phrase_card, text="Japanese phrase", style="CardMuted.TLabel").pack(anchor="w", pady=(8, 0))
         ttk.Label(phrase_card, textvariable=self.phrase_text, style="Japanese.TLabel", wraplength=380).pack(anchor="w", pady=(1, 8))
         phrase_actions = ttk.Frame(phrase_card, style="Card.TFrame")
         phrase_actions.pack(anchor="w", pady=(0, 10))
-        self.translate_button = ttk.Button(phrase_actions, text="Translate to English", style="Primary.TButton", command=self.translate)
+        self.translate_button = ttk.Button(phrase_actions, text="Translate selection", style="Primary.TButton", command=self.translate_selected)
         self.translate_button.pack(side="left")
         self.undo_button = ttk.Button(phrase_actions, text="Undo", style="Soft.TButton", command=self.undo)
         self.undo_button.pack(side="left", padx=6)
@@ -136,6 +140,31 @@ class KanaReaderApp:
         ttk.Label(phrase_card, textvariable=self.english, style="English.TLabel", wraplength=380).pack(anchor="w", pady=(3, 8))
         self.speak_button = ttk.Button(phrase_card, text="▶  Speak English", style="Soft.TButton", command=self.speak_english)
         self.speak_button.pack(anchor="w")
+
+        vocab_card = ttk.Frame(right, style="Card.TFrame", padding=15)
+        vocab_card.pack(fill="x", pady=(12, 0))
+        ttk.Label(vocab_card, text="3  ·  Learn vocabulary by level", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(vocab_card, text="Starter cards from N5 beginner through N1 advanced · session count", style="CardMuted.TLabel").pack(anchor="w", pady=(3, 8))
+        self.vocab_decks = self._load_vocabulary()
+        self.vocab_level = tk.StringVar(value="N5")
+        ttk.Combobox(vocab_card, textvariable=self.vocab_level, values=("N5", "N4", "N3", "N2", "N1"), state="readonly", width=8).pack(anchor="w")
+        self.vocab_level.trace_add("write", lambda *_: self._show_vocabulary())
+        self.vocab_word = tk.StringVar()
+        self.vocab_reading = tk.StringVar()
+        self.vocab_meaning = tk.StringVar(value="Press Show meaning when you are ready.")
+        ttk.Label(vocab_card, textvariable=self.vocab_word, style="Japanese.TLabel").pack(anchor="center", pady=(8, 0))
+        ttk.Label(vocab_card, textvariable=self.vocab_reading, style="CardMuted.TLabel").pack(anchor="center")
+        self.vocab_progress = tk.StringVar()
+        ttk.Label(vocab_card, textvariable=self.vocab_progress, style="CardMuted.TLabel").pack(anchor="w", pady=(5, 0))
+        ttk.Label(vocab_card, textvariable=self.vocab_meaning, style="English.TLabel", wraplength=380).pack(anchor="w", pady=(4, 6))
+        vocab_actions = ttk.Frame(vocab_card, style="Card.TFrame")
+        vocab_actions.pack(anchor="w")
+        ttk.Button(vocab_actions, text="Show meaning", style="Primary.TButton", command=self._reveal_vocabulary).pack(side="left")
+        ttk.Button(vocab_actions, text="I knew it", style="Soft.TButton", command=self._known_vocabulary).pack(side="left", padx=6)
+        ttk.Button(vocab_actions, text="Next word", style="Soft.TButton", command=self._next_vocabulary).pack(side="left")
+        self.vocab_index = 0
+        self.vocab_known = 0
+        self._show_vocabulary()
 
         self.status = tk.StringVar(value="Ready. Images stay on this computer.")
         ttk.Label(outer, textvariable=self.status, style="Status.TLabel", anchor="w", padding=(12, 8)).pack(fill="x", pady=(13, 0))
@@ -370,6 +399,46 @@ class KanaReaderApp:
             self.status.set("Your phrase is empty. Use Translate this line, or add kana to the phrase first.")
             return
         self._translate_text(text)
+
+    def translate_selected(self):
+        if self.translation_type.get() == "Phrase builder":
+            self.translate()
+        else:
+            self.translate_line()
+
+    def _load_vocabulary(self):
+        try:
+            path = ROOT / "src" / "static" / "vocabulary.json"
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {level: [] for level in ("N5", "N4", "N3", "N2", "N1")}
+
+    def _show_vocabulary(self):
+        deck = self.vocab_decks.get(self.vocab_level.get(), [])
+        if not deck:
+            self.vocab_word.set("Vocabulary unavailable")
+            self.vocab_reading.set("")
+            self.vocab_progress.set("Check that vocabulary.json is installed.")
+            return
+        self.vocab_index %= len(deck)
+        item = deck[self.vocab_index]
+        self.vocab_word.set(item["word"])
+        self.vocab_reading.set(item["reading"])
+        self.vocab_meaning.set("Press Show meaning when you are ready.")
+        self.vocab_progress.set(f"{self.vocab_level.get()} · Card {self.vocab_index + 1} of {len(deck)} · Known: {self.vocab_known}")
+
+    def _reveal_vocabulary(self):
+        deck = self.vocab_decks.get(self.vocab_level.get(), [])
+        if deck:
+            self.vocab_meaning.set(deck[self.vocab_index]["meaning"])
+
+    def _next_vocabulary(self):
+        self.vocab_index += 1
+        self._show_vocabulary()
+
+    def _known_vocabulary(self):
+        self.vocab_known += 1
+        self._next_vocabulary()
 
     def translate_line(self):
         text = self.kana_line.get().strip()

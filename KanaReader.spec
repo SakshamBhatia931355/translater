@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('checkpoints/best_model.pt', 'checkpoints'), ('models/opus-mt-ja-en', 'models/opus-mt-ja-en')]
+datas = [('checkpoints/best_model.pt', 'checkpoints'), ('models/opus-mt-ja-en', 'models/opus-mt-ja-en'), ('src/static/vocabulary.json', 'src/static')]
 binaries = []
 hiddenimports = ['pyttsx3.drivers.sapi5', 'comtypes.gen.SpeechLib', 'webcam_app']
 tmp_ret = collect_all('transformers')

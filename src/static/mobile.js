@@ -62,8 +62,56 @@ async function translate(text) {
     status('Translation ready.', 'success');
   } catch (error) { status(error.message, 'error'); }
 }
-document.querySelector('#translate-line').addEventListener('click', () => translate(japanese.value));
-document.querySelector('#translate-phrase').addEventListener('click', () => translate(phrase));
+document.querySelector('#translate-line').addEventListener('click', () => {
+  document.querySelector('#translation-type').value = 'line';
+  translate(japanese.value);
+});
+document.querySelector('#translate-phrase').addEventListener('click', () => {
+  const type = document.querySelector('#translation-type').value;
+  if (type === 'line') translate(japanese.value);
+  else if (type === 'word') translate(japanese.value || phrase);
+  else translate(phrase);
+});
+
+let vocabulary = {};
+let vocabIndex = 0;
+let knownCount = Number(localStorage.getItem('sakura-vocab-known') || 0);
+const vocabLevel = document.querySelector('#vocab-level');
+const vocabWord = document.querySelector('#vocab-word');
+const vocabReading = document.querySelector('#vocab-reading');
+const vocabMeaning = document.querySelector('#vocab-meaning');
+function showVocabCard() {
+  const level = vocabLevel.value;
+  const deck = vocabulary[level] || [];
+  if (!deck.length) return;
+  vocabIndex = ((vocabIndex % deck.length) + deck.length) % deck.length;
+  const card = deck[vocabIndex];
+  document.querySelector('#vocab-level-label').textContent = level;
+  vocabWord.textContent = card.word;
+  vocabReading.textContent = card.reading;
+  vocabMeaning.textContent = card.meaning;
+  vocabMeaning.hidden = true;
+  document.querySelector('#vocab-reveal').textContent = 'Show meaning';
+  document.querySelector('#vocab-progress').textContent = `Card ${vocabIndex + 1} of ${deck.length} · Known: ${knownCount}`;
+}
+fetch('/static/vocabulary.json').then(response => {
+  if (!response.ok) throw new Error('Vocabulary list unavailable');
+  return response.json();
+}).then(data => { vocabulary = data; showVocabCard(); }).catch(() => {
+  document.querySelector('#vocab-word').textContent = 'Vocabulary could not load.';
+});
+vocabLevel.addEventListener('change', () => { vocabIndex = 0; showVocabCard(); });
+document.querySelector('#vocab-reveal').addEventListener('click', () => {
+  vocabMeaning.hidden = false;
+  document.querySelector('#vocab-reveal').textContent = 'Meaning shown';
+});
+document.querySelector('#vocab-next').addEventListener('click', () => { vocabIndex++; showVocabCard(); });
+document.querySelector('#vocab-known').addEventListener('click', () => {
+  knownCount++;
+  localStorage.setItem('sakura-vocab-known', String(knownCount));
+  vocabIndex++;
+  showVocabCard();
+});
 document.querySelector('#speak').addEventListener('click', () => {
   const text = english.textContent;
   if (!text || text === 'Translation will appear here.' || !('speechSynthesis' in window)) {

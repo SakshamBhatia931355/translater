@@ -26,6 +26,8 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Spinner
+import android.widget.ArrayAdapter
 import android.widget.TextView
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -38,6 +40,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 private data class InkStroke(val path: Path, val color: Int, val width: Float)
+private data class VocabularyCard(val word: String, val reading: String, val meaning: String)
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private val pink = Color.rgb(217, 79, 131)
@@ -53,6 +56,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var addPhraseButton: Button
     private lateinit var phraseView: TextView
     private lateinit var englishView: TextView
+    private lateinit var translationTypePicker: Spinner
+    private lateinit var vocabLevelPicker: Spinner
+    private lateinit var vocabWordView: TextView
+    private lateinit var vocabReadingView: TextView
+    private lateinit var vocabMeaningView: TextView
+    private lateinit var vocabProgressView: TextView
+    private lateinit var vocabLevelLabel: TextView
+    private var vocabDecks: Map<String, List<VocabularyCard>> = emptyMap()
+    private var vocabIndex = 0
+    private var vocabKnown = 0
+    private var vocabRevealed = false
     private lateinit var pad: DrawingPad
     private var photoBitmap: Bitmap? = null
     private var phrase = ""
@@ -168,10 +182,15 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         val phraseCard = card()
         phraseCard.addView(text("3 · Build a word or phrase", 19, ink, true))
+        phraseCard.addView(text("Translation type", 13, muted), matchWrap(top = 6))
+        translationTypePicker = Spinner(this)
+        translationTypePicker.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            listOf("Word from reading", "Phrase builder", "Sentence from reading", "Recognized line"))
+        phraseCard.addView(translationTypePicker, matchWrap(top = 4))
         phraseView = text("(empty)", 25, ink)
         phraseCard.addView(phraseView, matchWrap(top = 4))
         val phraseActions = horizontal()
-        phraseActions.addView(button("Translate phrase", true) { translate(phrase) }, weightParams())
+        phraseActions.addView(button("Translate selection", true) { translateSelected() }, weightParams())
         phraseActions.addView(button("Undo", false) { undoPhrase() }, weightParams(start = 7))
         phraseActions.addView(button("Clear", false) { clearPhrase() }, weightParams(start = 7))
         phraseCard.addView(phraseActions, matchWrap(top = 10))
@@ -182,6 +201,46 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         phraseCard.addView(englishView, matchWrap(top = 4))
         phraseCard.addView(button("Speak English", false) { speakEnglish() }, matchWrap(top = 8))
         page.addView(phraseCard, matchWrap(top = 14))
+
+        val vocabCard = card()
+        vocabCard.addView(text("4 · Learn vocabulary by level", 19, ink, true))
+        vocabCard.addView(text("A starter deck of common words from N5 to N1. Your known-word count stays on this phone.", 13, muted))
+        vocabLevelPicker = Spinner(this)
+        vocabLevelPicker.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            listOf("N5 · Beginner", "N4 · Elementary", "N3 · Intermediate", "N2 · Upper intermediate", "N1 · Advanced"))
+        vocabCard.addView(vocabLevelPicker, matchWrap(top = 8))
+        val flash = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            background = rounded(Color.rgb(255, 241, 247), Color.rgb(240, 214, 225), dp(14).toFloat())
+        }
+        vocabWordView = text("水", 34, ink, true).apply { gravity = Gravity.CENTER }
+        vocabReadingView = text("みず", 18, muted).apply { gravity = Gravity.CENTER }
+        vocabMeaningView = text("water", 20, pink, true).apply { gravity = Gravity.CENTER; visibility = View.GONE }
+        vocabLevelLabel = text("N5", 12, pink, true).apply { gravity = Gravity.CENTER }
+        flash.addView(vocabLevelLabel)
+        flash.addView(vocabWordView)
+        flash.addView(vocabReadingView)
+        flash.addView(vocabMeaningView)
+        vocabCard.addView(flash, matchWrap(top = 10))
+        vocabProgressView = text("Card 1 · Known: 0", 13, muted)
+        vocabCard.addView(vocabProgressView, matchWrap(top = 6))
+        val vocabActions = horizontal()
+        vocabActions.addView(button("Show meaning", true) { revealVocabulary() }, weightParams())
+        vocabActions.addView(button("I knew it", false) { markVocabularyKnown() }, weightParams(start = 6))
+        vocabActions.addView(button("Next word", false) { nextVocabulary() }, weightParams(start = 6))
+        vocabCard.addView(vocabActions, matchWrap(top = 8))
+        vocabLevelPicker.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                vocabIndex = 0
+                vocabRevealed = false
+                showVocabularyCard()
+            }
+        }
+        loadVocabulary()
+        page.addView(vocabCard, matchWrap(top = 14))
     }
 
     private fun connectToPc() {
@@ -408,12 +467,60 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun translateSelected() {
+        val source = when (translationTypePicker.selectedItemPosition) {
+            0, 2, 3 -> japaneseField.text.toString()
+            else -> phrase
+        }
+        translate(source)
+    }
+
     private fun speakEnglish() {
         val text = englishView.text.toString()
         if (text == "Translation will appear here." || text.isBlank()) { showStatus("Translate Japanese before using speech.", true); return }
         tts?.language = Locale.US
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "sakura-english")
         showStatus("Speaking English.")
+    }
+
+    private fun loadVocabulary() {
+        try {
+            val json = JSONObject(assets.open("vocabulary.json").bufferedReader().use { it.readText() })
+            val levels = mutableMapOf<String, List<VocabularyCard>>()
+            for (levelName in listOf("N5", "N4", "N3", "N2", "N1")) {
+                val words = json.getJSONArray(levelName)
+                levels[levelName] = (0 until words.length()).map { n ->
+                    val item = words.getJSONObject(n)
+                    VocabularyCard(item.getString("word"), item.getString("reading"), item.getString("meaning"))
+                }
+            }
+            vocabDecks = levels
+            vocabKnown = getSharedPreferences("sakura-vocabulary", MODE_PRIVATE).getInt("known", 0)
+            showVocabularyCard()
+        } catch (_: Exception) { showStatus("Could not load the built-in vocabulary deck.", true) }
+    }
+
+    private fun currentVocabularyLevel() = listOf("N5", "N4", "N3", "N2", "N1").getOrElse(vocabLevelPicker.selectedItemPosition) { "N5" }
+    private fun showVocabularyCard() {
+        if (!::vocabWordView.isInitialized) return
+        val level = currentVocabularyLevel()
+        val deck = vocabDecks[level].orEmpty()
+        if (deck.isEmpty()) return
+        vocabIndex = ((vocabIndex % deck.size) + deck.size) % deck.size
+        val card = deck[vocabIndex]
+        vocabLevelLabel.text = level
+        vocabWordView.text = card.word
+        vocabReadingView.text = card.reading
+        vocabMeaningView.text = card.meaning
+        vocabMeaningView.visibility = if (vocabRevealed) View.VISIBLE else View.GONE
+        vocabProgressView.text = "$level · Card ${vocabIndex + 1} of ${deck.size} · Known: $vocabKnown"
+    }
+    private fun revealVocabulary() { vocabRevealed = true; showVocabularyCard() }
+    private fun nextVocabulary() { vocabIndex++; vocabRevealed = false; showVocabularyCard() }
+    private fun markVocabularyKnown() {
+        vocabKnown++
+        getSharedPreferences("sakura-vocabulary", MODE_PRIVATE).edit().putInt("known", vocabKnown).apply()
+        nextVocabulary()
     }
 
     private fun baseUrl(): String? {
