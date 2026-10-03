@@ -1,0 +1,5 @@
+{
+  "name":"Kotoba Japanese Practice","short_name":"Kotoba","description":"Personal Japanese conversation, writing, and vocabulary practice.",
+  "start_url":"/","scope":"/","display":"standalone","background_color":"#fffaf9","theme_color":"#fffaf9",
+  "icons":[{"src":"/static/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

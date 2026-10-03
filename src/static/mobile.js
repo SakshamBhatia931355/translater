@@ -1,227 +1,61 @@
-const photo = document.querySelector('#photo');
-const preview = document.querySelector('#preview');
-const recognizeButton = document.querySelector('#recognize');
-const addButton = document.querySelector('#add');
-const statusEl = document.querySelector('#status');
-const japanese = document.querySelector('#japanese');
-const readings = document.querySelector('#readings');
-const phraseEl = document.querySelector('#phrase');
-const english = document.querySelector('#english');
-const voiceStatus = document.querySelector('#voice-status');
-let phrase = '';
-let lastVoiceTranscript = '';
+const $ = (s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const state={profile:null,dashboard:null,lessons:[],scenarios:[],conversation:null,mode:'guided',suggestions:[],dueCards:[],reviewIndex:0,currentCard:null,autoPhrase:''};
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+async function api(url,options={}){const response=await fetch(url,{credentials:'same-origin',...options,headers:{...(options.body instanceof FormData?{}:{'Content-Type':'application/json'}),...(options.headers||{})}});const data=await response.json().catch(()=>({error:'The server returned an unreadable response.'}));if(!response.ok){const e=new Error(data.error||`Request failed (${response.status})`);e.status=response.status;throw e;}return data;}
+function notice(el,msg,kind=''){if(el){el.textContent=msg;el.className=`hint ${kind}`.trim();}}
+function setStatus(msg,kind=''){notice($('#status'),msg,kind);}
+function speak(text,lang='ja-JP'){if(!text||!window.speechSynthesis){$('#voice-status').textContent='Speech playback is not available on this device.';return;}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang=lang;u.rate=Number(localStorage.getItem('kotoba-audio-speed')||1);window.speechSynthesis.speak(u);}
+function formatDay(value){return new Intl.DateTimeFormat(undefined,{weekday:'short'}).format(new Date(`${value}T12:00:00`));}
+function showSection(id){$$('.page-section').forEach(s=>s.hidden=s.id!==id);$$('[data-nav]').forEach(a=>a.classList.toggle('active',a.dataset.nav===id));if(location.hash!==`#${id}`)history.replaceState(null,'',`#${id}`);if(id==='learn-section'){loadLessons();loadDueCards();}if(id==='speak-section')loadConversationHistory();if(id==='progress-section')refreshDashboard();window.scrollTo({top:0,behavior:'smooth'});}
+$$('[data-nav]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();showSection(a.dataset.nav);}));$$('[data-target]').forEach(b=>b.addEventListener('click',()=>showSection(b.dataset.target)));window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if($(`#${CSS.escape(id)}.page-section`))showSection(id);});
+function setTheme(theme){document.documentElement.dataset.theme=theme;localStorage.setItem('kotoba-theme',theme);$('#theme-toggle').setAttribute('aria-label',theme==='dark'?'Switch to light mode':'Switch to dark mode');}setTheme(localStorage.getItem('kotoba-theme')||'light');$('#theme-toggle').addEventListener('click',()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark'));
+function fillForm(form,data){for(const [k,v] of Object.entries(data)){const el=form.elements.namedItem(k);if(el)el.value=String(v);}}
+function formData(form){return Object.fromEntries(new FormData(form).entries());}
+function renderWeek(days){const chart=$('#week-chart');chart.replaceChildren();const max=Math.max(1,...days.map(d=>d.minutes));days.forEach(d=>{const col=document.createElement('div');col.className='week-day';const n=document.createElement('span');n.textContent=d.minutes?`${d.minutes}m`:'';const bar=document.createElement('div');bar.className='week-bar';bar.style.height=`${Math.max(d.minutes?8:3,d.minutes/max*100)}%`;bar.title=`${formatDay(d.date)} · ${d.minutes} active minutes`;const label=document.createElement('small');label.textContent=formatDay(d.date);col.append(n,bar,label);chart.append(col);});}
+function renderDashboard(data){state.dashboard=data;state.profile=data.profile;$('#greeting-name').textContent=data.profile.display_name?`、${data.profile.display_name}さん`:'';$('#today-minutes').textContent=data.today_minutes;$('#goal-minutes').textContent=data.today_goal_minutes;const pct=Math.min(100,Math.round(data.today_minutes/Math.max(1,data.today_goal_minutes)*100));$('#goal-percent').textContent=`${pct}%`;$('#goal-ring').style.setProperty('--progress',`${pct}%`);$('#goal-message').textContent=data.goal_complete?'Daily goal reached. Nice work.':`${Math.max(0,data.today_goal_minutes-data.today_minutes)} minutes to your daily target.`;$('#streak-days').textContent=data.streak_days;$('#lessons-done').textContent=data.lessons_completed;$('#words-mastered').textContent=data.vocabulary_mastered;$('#words-due').textContent=data.vocabulary_due;$('#total-minutes').textContent=data.total_study_minutes;$('#conversation-count').textContent=data.conversation_sessions;$('#cards-reviewed').textContent=data.vocabulary_reviewed;$('#current-level').textContent=data.profile.jlpt_level;
+ const lesson=state.lessons.find(x=>!x.progress?.completed&&x.level===data.profile.jlpt_level)||state.lessons.find(x=>!x.progress?.completed);$('#next-title').textContent=lesson?lesson.title:'Continue with a conversation';$('#next-copy').textContent=lesson?`${lesson.category} · about ${lesson.minutes} min · ${lesson.objective}`:'Try a speaking scene or review a word.';$('#next-action').textContent=lesson?'Start this lesson →':'Open speaking practice →';$('#next-action').onclick=()=>lesson?(showSection('learn-section'),openLesson(lesson.id)):showSection('speak-section');
+ const recent=$('#recent-activity');if(!data.recent_activity.length)recent.innerHTML='<p class="empty-state">Your learning activity will appear here as you practice.</p>';else{recent.replaceChildren(...data.recent_activity.map(item=>{const row=document.createElement('div');row.className='activity-row';const title=document.createElement('strong');title.textContent=activityName(item.kind);const time=document.createElement('time');time.textContent=new Date(item.created_at).toLocaleString();row.append(title,time);return row;}));}const best=Math.max(0,...state.lessons.map(l=>l.progress?.best_score||0));$('#best-score').textContent=best?`${Math.round(best*100)}%`:'—';renderWeek(data.week);const deck=window.dailyDeck||[];if(deck.length){const card=deck[new Date().getDate()%deck.length];$('#daily-word').textContent=card.word;$('#daily-reading').textContent=card.reading;$('#daily-meaning').textContent=card.meaning;$('#daily-speak').onclick=()=>speak(card.word);}}
+function activityName(kind){return({study_time:'Focused practice',lesson_completed:'Lesson completed',lesson_attempt:'Lesson quiz attempt',vocabulary_review:'Vocabulary reviewed',translation:'Japanese translated',recognition:'Handwriting read',conversation_turn:'Conversation practiced',conversation_completed:'Conversation finished'})[kind]||'Learning activity';}
+async function refreshDashboard(){try{renderDashboard(await api('/api/v1/dashboard'));}catch(e){console.error(e);}}
+async function loadInitial(){try{const [profile,caps,deck]=await Promise.all([api('/api/v1/profile'),api('/api/v1/capabilities'),api('/static/vocabulary.json').then(r=>r.json())]);state.profile=profile;window.dailyDeck=deck[profile.jlpt_level]||deck.N5;const badge=$('#connection-badge');badge.textContent=caps.ai_configured?'AI tutor configured':'Guided mode';badge.classList.toggle('is-guided',!caps.ai_configured);$('#tutor-mode-label').textContent=caps.ai_configured?'AI tutor configured on this PC.':'Guided scripted scenes are ready. No live AI is configured.';$('#version-capabilities').textContent=`Mode: ${caps.ai_configured?'server-configured AI':'guided scenarios'}. Handwriting: hiragana only. Pronunciation scoring: unavailable.`;$('#guided-mode').checked=!caps.ai_configured;$('#guided-mode').disabled=!caps.ai_configured;fillForm($('#profile-form'),profile);state.lessons=(await api(`/api/v1/lessons?level=${profile.jlpt_level}`)).lessons;await refreshDashboard();if(!profile.onboarding_complete)$('#onboarding-dialog').showModal();await loadScenarios();await loadLessons();await loadDueCards();await loadConversationHistory();if(location.hash)showSection(location.hash.slice(1));}catch(e){console.error(e);$('#connection-badge').textContent='Server unavailable';setStatus(`Could not load learner data: ${e.message}`,'error');}}
+$('#skip-onboarding').addEventListener('click',()=>$('#onboarding-dialog').close());$('#explore-first').addEventListener('click',()=>$('#onboarding-dialog').close());$('#onboarding-form').addEventListener('submit',async e=>{e.preventDefault();try{const p=await api('/api/v1/profile',{method:'PUT',body:JSON.stringify(formData(e.currentTarget))});state.profile=p;$('#onboarding-dialog').close();fillForm($('#profile-form'),p);await refreshDashboard();}catch(error){notice($('#onboarding-status'),error.message,'error');}});$('#edit-goals').addEventListener('click',()=>showSection('profile-section'));
+$('#profile-form').addEventListener('submit',async e=>{e.preventDefault();try{const p=await api('/api/v1/profile',{method:'PUT',body:JSON.stringify(formData(e.currentTarget))});state.profile=p;notice($('#profile-status'),'Preferences saved on this PC.','success');state.lessons=(await api(`/api/v1/lessons?level=${p.jlpt_level}`)).lessons;await refreshDashboard();}catch(error){notice($('#profile-status'),error.message,'error');}});
+$('#delete-data').addEventListener('click',async()=>{if(!confirm('Delete this learner profile, progress, reviews, and conversation history from this PC?'))return;try{await api('/api/v1/account/data',{method:'DELETE'});location.reload();}catch(e){alert(e.message);}});
+$('#lesson-level').addEventListener('change',loadLessons);$('#vocab-level').addEventListener('change',()=>{state.reviewIndex=0;loadDueCards();});
+async function loadLessons(){try{const level=$('#lesson-level').value||state.profile?.jlpt_level||'N5';const data=await api(`/api/v1/lessons?level=${level}`);state.lessons=data.lessons;renderLessons(data.lessons);if(state.dashboard)renderDashboard({...state.dashboard,profile:state.profile});}catch(e){$('#lesson-list').textContent=e.message;}}
+function renderLessons(lessons){const list=$('#lesson-list');list.replaceChildren();if(!lessons.length){const p=document.createElement('p');p.className='empty-state';p.textContent='No starter lessons for this level yet. Try a lower level.';list.append(p);return;}for(const lesson of lessons){const card=document.createElement('article');card.className='lesson-card';const top=document.createElement('div');top.className='lesson-card-top';const title=document.createElement('h3');title.textContent=lesson.title;const stateLabel=document.createElement('span');stateLabel.className=`lesson-status ${lesson.progress.completed?'complete':''}`;stateLabel.textContent=lesson.progress.completed?'Complete':lesson.progress.attempts?`Resume · best ${Math.round(lesson.progress.best_score*100)}%`:'Not started';top.append(title,stateLabel);const meta=document.createElement('p');meta.className='muted';meta.textContent=`${lesson.category} · ${lesson.minutes} min · ${lesson.objective}`;const button=document.createElement('button');button.className='button';button.textContent=lesson.progress.completed?'Review lesson':'Open lesson';button.addEventListener('click',()=>openLesson(lesson.id));card.append(top,meta,button);list.append(card);}}
+async function openLesson(id){try{const data=await api(`/api/v1/lessons/${encodeURIComponent(id)}`);renderLesson(data.lesson,data.progress);$('#lesson-view').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){const v=$('#lesson-view');v.hidden=false;v.textContent=e.message;}}
+function renderLesson(lesson,progress){const v=$('#lesson-view');v.hidden=false;v.replaceChildren();const h=document.createElement('h2');h.textContent=lesson.title;v.append(h);const objective=document.createElement('p');objective.className='notice';objective.textContent=`Learning objective: ${lesson.objective}`;v.append(objective);for(const key of ['intro','explanation']){const p=document.createElement('p');p.textContent=lesson[key];v.append(p);}const examples=document.createElement('div');examples.className='example-list';for(const ex of lesson.examples){const row=document.createElement('article');row.className='example-row';const ja=document.createElement('strong');ja.lang='ja';ja.textContent=ex.ja;const reading=document.createElement('span');reading.textContent=`${ex.reading} · ${ex.en}`;const hear=document.createElement('button');hear.className='text-button';hear.textContent='Hear';hear.addEventListener('click',()=>speak(ex.ja));row.append(ja,reading,hear);examples.append(row);}v.append(examples);const field=document.createElement('fieldset');field.className='exercise';const legend=document.createElement('legend');legend.textContent=lesson.exercise.prompt;field.append(legend);for(const choice of lesson.exercise.choices){const label=document.createElement('label');label.className='choice-row';const radio=document.createElement('input');radio.type='radio';radio.name='lesson-answer';radio.value=choice;label.append(radio,document.createTextNode(choice));field.append(label);}v.append(field);const action=document.createElement('button');action.className='button primary';action.textContent='Check answer';const result=document.createElement('p');result.className='result';action.addEventListener('click',async()=>{const answer=$('input[name="lesson-answer"]:checked',field)?.value;if(!answer){result.textContent='Choose an answer first.';return;}action.disabled=true;try{const out=await api(`/api/v1/lessons/${encodeURIComponent(lesson.id)}/complete`,{method:'POST',body:JSON.stringify({answers:{answer}})});result.className=`result ${out.passed?'success':'error'}`;result.textContent=`${out.passed?'Correct.':'Not quite.'} ${out.explanation} ${out.completed?'Lesson marked complete.':'Try again to complete this lesson.'}`;await loadLessons();await refreshDashboard();}catch(error){result.textContent=error.message;}finally{action.disabled=false;}});v.append(action,result);const note=document.createElement('small');note.className='muted';note.textContent=`${lesson.source_note}${progress?.attempts?` · Attempts: ${progress.attempts}`:''}`;v.append(note);}
 
-function status(message, kind = '') { statusEl.textContent = message; statusEl.className = `status ${kind}`; }
-function updatePhrase() { phraseEl.textContent = phrase || '(empty)'; }
-function escapeHtml(value) { return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char])); }
+async function loadDueCards(){try{const level=$('#vocab-level').value||state.profile?.jlpt_level||'N5';state.dueCards=(await api(`/api/v1/reviews/due?level=${level}&limit=40`)).cards;state.reviewIndex=0;renderReviewCard();}catch(e){$('#review-card').textContent=e.message;}}
+function renderReviewCard(){const box=$('#review-card'),card=state.dueCards[state.reviewIndex];state.currentCard=card||null;box.replaceChildren();if(!card){const p=document.createElement('p');p.className='empty-state';p.textContent='No cards due at this level. Add a word or return when your next review is due.';box.append(p);$('#review-actions').hidden=true;$('#bookmark-word').hidden=true;$('#srs-speak').hidden=true;return;}const level=document.createElement('span');level.className='level-chip';level.textContent=`${card.level} · ${card.topic}`;const word=document.createElement('p');word.className='vocab-word';word.lang='ja';word.textContent=card.word;const reading=document.createElement('p');reading.className='vocab-reading';reading.lang='ja';reading.textContent=card.reading;const meaning=document.createElement('p');meaning.className='vocab-meaning';meaning.textContent=card.meaning;meaning.hidden=true;const example=document.createElement('p');example.className='vocab-example';example.textContent=card.example_ja?`${card.example_ja} · ${card.example_en}`:'';box.append(level,word,reading,meaning,example);box.onclick=()=>{meaning.hidden=false;};$('#review-actions').hidden=false;$('#bookmark-word').hidden=false;$('#bookmark-word').textContent=card.bookmarked?'★ Saved word':'☆ Save word';$('#srs-speak').hidden=false;$('#review-status').textContent=`Card ${state.reviewIndex+1} of ${state.dueCards.length} due · tap card to reveal`;}
+$$('[data-rating]').forEach(button=>button.addEventListener('click',async()=>{const card=state.currentCard;if(!card)return;try{const saved=await api(`/api/v1/reviews/${card.id}`,{method:'POST',body:JSON.stringify({rating:button.dataset.rating})});$('#review-status').textContent=`Saved · next review ${new Date(saved.due_at).toLocaleDateString()}`;state.reviewIndex++;await refreshDashboard();setTimeout(renderReviewCard,300);}catch(e){$('#review-status').textContent=e.message;}}));
+$('#bookmark-word').addEventListener('click',async()=>{if(!state.currentCard)return;try{const r=await api(`/api/v1/vocabulary/${state.currentCard.id}/bookmark`,{method:'POST',body:'{}'});state.currentCard.bookmarked=r.bookmarked;$('#bookmark-word').textContent=r.bookmarked?'★ Saved word':'☆ Save word';}catch(e){$('#review-status').textContent=e.message;}});$('#srs-speak').addEventListener('click',()=>state.currentCard&&speak(state.currentCard.word));
+$('#custom-word-form').addEventListener('submit',async e=>{e.preventDefault();try{await api('/api/v1/vocabulary',{method:'POST',body:JSON.stringify(formData(e.currentTarget))});e.currentTarget.reset();$('#review-status').textContent='Word saved to your deck.';await loadDueCards();}catch(error){$('#review-status').textContent=error.message;}});
+async function loadScenarios(){try{state.scenarios=(await api('/api/v1/conversations/scenarios')).scenarios;renderScenarios();}catch(e){$('#scenario-list').textContent=e.message;}}
+function renderScenarios(){const list=$('#scenario-list');list.replaceChildren();for(const s of state.scenarios){const b=document.createElement('button');b.className='scenario-card';const h=document.createElement('strong');h.textContent=s.title;const meta=document.createElement('span');meta.textContent=`${s.level} · ${s.goal}`;b.append(h,meta);b.addEventListener('click',()=>startConversation(s.id));list.append(b);}}
+async function startConversation(id){try{const data=await api('/api/v1/conversations',{method:'POST',body:JSON.stringify({scenario_id:id,mode:$('#guided-mode').checked?'guided':'ai'})});state.conversation=data.id;state.mode=data.mode;$('#scenario-title').textContent=data.scenario.title;$('#scenario-level').textContent=`${data.scenario.level} · ${data.mode==='ai'?'AI TUTOR':'GUIDED PRACTICE'}`;$('#scenario-goal').textContent=data.scenario.goal;$('#conversation-notice').textContent=data.notice;$('#conversation-panel').hidden=false;$('#session-report').hidden=true;$('#conversation').replaceChildren();appendMessage(data.message);renderSuggestions(data.suggestions);$('#conversation-panel').scrollIntoView({behavior:'smooth'});loadConversationHistory();}catch(e){$('#tutor-mode-label').textContent=e.message;}}
+function appendMessage(m){const bubble=document.createElement('article');bubble.className=`bubble ${m.speaker==='user'?'user-bubble':'assistant-bubble'}`;const text=document.createElement('p');text.lang='ja';text.textContent=m.text;bubble.append(text);if(m.translation){const tr=document.createElement('p');tr.className='bubble-translation';tr.textContent=m.translation;bubble.append(tr);}if(m.correction){const c=document.createElement('p');c.className='correction-note';c.textContent=`Suggested correction: ${m.correction}${m.explanation?' · '+m.explanation:''}`;bubble.append(c);}if(m.new_words?.length){const w=document.createElement('small');w.textContent=`Words: ${m.new_words.join(' · ')}`;bubble.append(w);}if(m.speaker==='assistant'){const hear=document.createElement('button');hear.className='text-button';hear.textContent='Hear reply';hear.addEventListener('click',()=>speak(m.text));bubble.append(hear);}$('#conversation').append(bubble);bubble.scrollIntoView({block:'nearest',behavior:'smooth'});}
+function renderSuggestions(items){state.suggestions=items||[];const box=$('#suggestions');box.replaceChildren();for(const item of state.suggestions){const b=document.createElement('button');b.className='suggestion-chip';b.lang='ja';b.textContent=`${item.ja} · ${item.en}`;b.addEventListener('click',()=>sendTurn(item.ja));box.append(b);}if(!state.suggestions.length){const p=document.createElement('p');p.className='hint';p.textContent='Finish this scene to view its recap.';box.append(p);}}
+async function sendTurn(override){if(!state.conversation)return;const text=(override??$('#tutor-input').value).trim();if(!text){$('#voice-status').textContent='Type a response or choose a suggested line.';return;}$('#send-turn').disabled=true;$('#tutor-input').value='';try{const data=await api(`/api/v1/conversations/${state.conversation}/turn`,{method:'POST',body:JSON.stringify({text})});appendMessage({speaker:'user',text});appendMessage(data.message);$('#voice-status').textContent=data.mode==='guided'&&!data.accepted_suggestion?'Guided mode cannot grade free text; choose one of the suggested lines.':data.mode==='ai'?'Tutor reply from the configured provider.':'Suggested response accepted.';renderSuggestions(data.suggestions);await refreshDashboard();}catch(e){$('#voice-status').textContent=e.message;}finally{$('#send-turn').disabled=false;}}
+$('#send-turn').addEventListener('click',()=>sendTurn());$('#tutor-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendTurn();}});
+$('#finish-conversation').addEventListener('click',async()=>{if(!state.conversation)return;try{const report=await api(`/api/v1/conversations/${state.conversation}/finish`,{method:'POST',body:'{}'});const box=$('#session-report');box.hidden=false;box.replaceChildren();const h=document.createElement('h3');h.textContent='Session recap';const p=document.createElement('p');p.textContent=`${report.scenario} · ${report.turns} learner turns`;const note=document.createElement('p');note.className='notice';note.textContent=report.feedback_note;const ul=document.createElement('ul');report.vocabulary.forEach(word=>{const li=document.createElement('li');li.textContent=word;ul.append(li);});box.append(h,p,note,ul);await refreshDashboard();await loadConversationHistory();}catch(e){$('#voice-status').textContent=e.message;}});
+async function loadConversationHistory(){try{const data=await api('/api/v1/conversations'),box=$('#conversation-history');box.replaceChildren();if(!data.items.length){box.innerHTML='<p class="empty-state">Completed sessions will be saved here.</p>';return;}for(const item of data.items){const row=document.createElement('div');row.className='activity-row';const name=document.createElement('strong');name.textContent=item.title;const meta=document.createElement('span');meta.textContent=`${item.mode==='ai'?'AI tutor':'guided'} · ${item.turns} turns · ${item.completed?'finished':'in progress'} · ${new Date(item.created_at).toLocaleDateString()}`;row.append(name,meta);box.append(row);}}catch(e){$('#conversation-history').textContent=e.message;}}
+function speechInput(target,status){if(!SpeechRecognition){status.textContent='This browser cannot recognize speech. Type Japanese instead.';return;}try{const rec=new SpeechRecognition();rec.lang='ja-JP';rec.continuous=false;rec.interimResults=false;rec.maxAlternatives=1;status.textContent='Listening in Japanese…';rec.onresult=e=>{const value=e.results?.[0]?.[0]?.transcript?.trim()||'';if(value){target.value=value;target.dispatchEvent(new Event('input',{bubbles:true}));status.textContent='Speech transcribed. This is not a pronunciation score.';}else status.textContent='No speech recognized. Try again or type a response.';};rec.onerror=e=>status.textContent=e.error==='not-allowed'?'Microphone permission is blocked. Check browser settings.':`Speech input ended (${e.error||'no match'}).`;rec.start();}catch(e){status.textContent=`Could not start speech input: ${e.message}`;}}
+$('#tutor-listen').addEventListener('click',()=>speechInput($('#tutor-input'),$('#voice-status')));
 
-function addBubble(text, kind, label) {
-  const bubble = document.createElement('div');
-  bubble.className = `bubble ${kind}`;
-  const content = document.createElement('p');
-  content.textContent = text;
-  const caption = document.createElement('span');
-  caption.textContent = label;
-  bubble.append(content, caption);
-  const conversation = document.querySelector('#conversation');
-  conversation.appendChild(bubble);
-  bubble.scrollIntoView({block: 'nearest', behavior: 'smooth'});
-}
-
-async function recognizeImage(file) {
-  recognizeButton.disabled = true;
-  status('Reading handwriting…');
-  try {
-    const data = new FormData(); data.append('image', file);
-    const response = await fetch('/api/recognize', {method: 'POST', body: data});
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Could not read this image.');
-    japanese.value = result.kana || '';
-    readings.innerHTML = result.readings.length ? result.readings.map((r, i) =>
-      `<div class="reading"><strong>${i + 1}. ${escapeHtml(r.kana)}</strong> · ${escapeHtml(r.pronunciation)} · ${Math.round(r.confidence * 100)}%<br><span class="hint">Other guesses: ${r.alternatives.slice(1).map(a => `${escapeHtml(a.kana)} ${Math.round(a.confidence * 100)}%`).join(' · ')}</span></div>`
-    ).join('') : 'No kana found. Try a closer, brighter image.';
-    addButton.disabled = !japanese.value.trim();
-    status(result.kana ? `Read ${result.readings.length} character(s). Check or edit the result.` : 'No kana found.', result.kana ? 'success' : '');
-  } catch (error) { status(error.message, 'error'); }
-  finally { recognizeButton.disabled = !photo.files?.[0]; }
-}
-
-photo.addEventListener('change', () => {
-  const file = photo.files?.[0];
-  if (!file) return;
-  if (preview.dataset.url) URL.revokeObjectURL(preview.dataset.url);
-  preview.dataset.url = URL.createObjectURL(file);
-  preview.src = preview.dataset.url;
-  preview.hidden = false;
-  recognizeButton.disabled = false;
-  status('Photo ready. Tap “Read photo”.');
-});
-recognizeButton.addEventListener('click', () => {
-  const file = photo.files?.[0];
-  if (file) recognizeImage(file);
-});
-
-const pad = document.querySelector('#drawing-pad');
-const pen = pad.getContext('2d');
-let strokes = [];
-let activeStroke = null;
-let inkColor = '#16181d';
-let erasing = false;
-function padSize() { const rect = pad.getBoundingClientRect(); return {width: rect.width, height: rect.height}; }
-function redrawPad() {
-  const {width, height} = padSize();
-  const ratio = window.devicePixelRatio || 1;
-  if (pad.width !== Math.round(width * ratio) || pad.height !== Math.round(height * ratio)) {
-    pad.width = Math.max(1, Math.round(width * ratio));
-    pad.height = Math.max(1, Math.round(height * ratio));
-  }
-  pen.setTransform(ratio, 0, 0, ratio, 0, 0);
-  pen.clearRect(0, 0, width, height);
-  pen.fillStyle = '#fff'; pen.fillRect(0, 0, width, height);
-  [...strokes, ...(activeStroke ? [activeStroke] : [])].forEach(stroke => {
-    const points = stroke.points;
-    if (!points.length) return;
-    const xy = p => [p.x * width, p.y * height];
-    pen.beginPath(); pen.lineCap = 'round'; pen.lineJoin = 'round';
-    pen.strokeStyle = stroke.color; pen.fillStyle = stroke.color; pen.lineWidth = stroke.width;
-    const [sx, sy] = xy(points[0]); pen.moveTo(sx, sy);
-    if (points.length === 1) { pen.arc(sx, sy, stroke.width / 2, 0, Math.PI * 2); pen.fill(); return; }
-    for (let i = 1; i < points.length; i++) {
-      const [x0, y0] = xy(points[i - 1]); const [x1, y1] = xy(points[i]);
-      pen.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
-    }
-    const [lastX, lastY] = xy(points[points.length - 1]); pen.lineTo(lastX, lastY); pen.stroke();
-  });
-}
-function canvasPoint(event) {
-  const rect = pad.getBoundingClientRect();
-  return {x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))};
-}
-pad.addEventListener('pointerdown', event => {
-  event.preventDefault(); pad.setPointerCapture(event.pointerId);
-  activeStroke = {points:[canvasPoint(event)], color: erasing ? '#ffffff' : inkColor, width: erasing ? 24 : 8}; redrawPad();
-});
-pad.addEventListener('pointermove', event => { if (activeStroke && event.buttons) { activeStroke.points.push(canvasPoint(event)); redrawPad(); } });
-function finishStroke() { if (activeStroke) strokes.push(activeStroke); activeStroke = null; redrawPad(); }
-pad.addEventListener('pointerup', finishStroke); pad.addEventListener('pointercancel', finishStroke);
-window.addEventListener('resize', redrawPad);
-document.querySelector('#draw-color').addEventListener('click', event => {
-  inkColor = inkColor === '#16181d' ? '#315fd4' : '#16181d'; erasing = false;
-  event.currentTarget.textContent = inkColor === '#16181d' ? 'Ink: black' : 'Ink: blue';
-  document.querySelector('#draw-eraser').setAttribute('aria-pressed', 'false');
-});
-document.querySelector('#draw-eraser').addEventListener('click', event => {
-  erasing = !erasing; event.currentTarget.setAttribute('aria-pressed', String(erasing));
-  event.currentTarget.textContent = erasing ? 'Eraser: on' : 'Eraser';
-});
-document.querySelector('#draw-undo').addEventListener('click', () => { strokes.pop(); redrawPad(); });
-document.querySelector('#draw-clear').addEventListener('click', () => { strokes = []; activeStroke = null; redrawPad(); });
-document.querySelector('#read-drawing').addEventListener('click', () => {
-  finishStroke();
-  if (!strokes.length) { status('Draw one Japanese character in the box first.', 'error'); return; }
-  pad.toBlob(blob => {
-    if (!blob) { status('Could not prepare that drawing.', 'error'); return; }
-    recognizeImage(new File([blob], 'japanese-drawing.png', {type:'image/png'}));
-  }, 'image/png');
-});
-redrawPad();
-
-japanese.addEventListener('input', () => { addButton.disabled = !japanese.value.trim(); });
-addButton.addEventListener('click', () => {
-  phrase += japanese.value.trim(); updatePhrase(); addButton.disabled = true;
-  status('Added to your phrase.', 'success');
-});
-document.querySelector('#undo').addEventListener('click', () => { phrase = Array.from(phrase).slice(0, -1).join(''); updatePhrase(); });
-document.querySelector('#clear').addEventListener('click', () => { phrase = ''; updatePhrase(); english.textContent = 'Your translation will appear here.'; });
-
-async function translate(text) {
-  if (!text.trim()) { status('Say, type, or recognize some Japanese first.', 'error'); return null; }
-  status('Translating…');
-  try {
-    const response = await fetch('/api/translate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text})});
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Translation failed.');
-    english.textContent = result.translation || '(No translation returned)';
-    status('Translation ready.', 'success');
-    return english.textContent;
-  } catch (error) { status(error.message, 'error'); return null; }
-}
-document.querySelector('#translate-line').addEventListener('click', () => {
-  document.querySelector('#translation-type').value = 'line';
-  translate(japanese.value);
-});
-document.querySelector('#translate-phrase').addEventListener('click', () => {
-  const type = document.querySelector('#translation-type').value;
-  if (type === 'line') translate(japanese.value);
-  else if (type === 'word') translate(japanese.value || phrase);
-  else translate(phrase);
-});
-
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-const listenButton = document.querySelector('#voice-listen');
-let recognizer = null;
-listenButton.addEventListener('click', () => {
-  if (!SpeechRecognition) { voiceStatus.textContent = 'Voice input is not available here. Try Chrome on Android, or type Japanese below.'; return; }
-  try {
-    recognizer = new SpeechRecognition();
-    recognizer.lang = 'ja-JP'; recognizer.continuous = false; recognizer.interimResults = false; recognizer.maxAlternatives = 1;
-    listenButton.disabled = true; voiceStatus.textContent = 'Listening… say a short Japanese phrase.';
-    recognizer.onresult = event => {
-      lastVoiceTranscript = event.results?.[0]?.[0]?.transcript?.trim() || '';
-      if (lastVoiceTranscript) {
-        japanese.value = lastVoiceTranscript; addButton.disabled = false;
-        addBubble(lastVoiceTranscript, 'user-bubble', 'You said · Japanese');
-        voiceStatus.textContent = 'Got it. Translate the phrase or edit the text first.';
-      } else voiceStatus.textContent = 'I could not make out those words. Try once more.';
-    };
-    recognizer.onerror = event => { voiceStatus.textContent = event.error === 'not-allowed' ? 'Microphone access was blocked. Allow it in browser settings and try again.' : `Voice input ended (${event.error || 'no match'}). You can type instead.`; };
-    recognizer.onend = () => { listenButton.disabled = false; };
-    recognizer.start();
-  } catch (error) { listenButton.disabled = false; voiceStatus.textContent = `Could not start voice input: ${error.message}`; }
-});
-document.querySelector('#voice-translate').addEventListener('click', async () => {
-  const spoken = lastVoiceTranscript || japanese.value.trim();
-  if (!spoken) { voiceStatus.textContent = 'Tap Speak Japanese or type a phrase first.'; return; }
-  const translation = await translate(spoken);
-  if (translation) addBubble(translation, 'translation-bubble', 'English meaning');
-});
-
-function speak(text, lang, message) {
-  if (!text || !('speechSynthesis' in window)) { voiceStatus.textContent = 'Speech playback is not available in this browser.'; return; }
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text); utterance.lang = lang;
-  window.speechSynthesis.speak(utterance); voiceStatus.textContent = message;
-}
-document.querySelector('#voice-hear-japanese').addEventListener('click', () => speak(japanese.value.trim(), 'ja-JP', 'Playing Japanese speech.'));
-document.querySelector('#speak').addEventListener('click', () => {
-  const text = english.textContent === 'Your translation will appear here.' ? '' : english.textContent;
-  speak(text, 'en-US', 'Playing English speech.');
-});
-
-let vocabulary = {};
-let vocabIndex = 0;
-let knownCount = Number(localStorage.getItem('sakura-vocab-known') || 0);
-const vocabLevel = document.querySelector('#vocab-level');
-const vocabWord = document.querySelector('#vocab-word');
-const vocabReading = document.querySelector('#vocab-reading');
-const vocabMeaning = document.querySelector('#vocab-meaning');
-function showVocabCard() {
-  const level = vocabLevel.value; const deck = vocabulary[level] || [];
-  if (!deck.length) return;
-  vocabIndex = ((vocabIndex % deck.length) + deck.length) % deck.length;
-  const card = deck[vocabIndex];
-  document.querySelector('#vocab-level-label').textContent = level;
-  vocabWord.textContent = card.word; vocabReading.textContent = card.reading; vocabMeaning.textContent = card.meaning;
-  vocabMeaning.hidden = true; document.querySelector('#vocab-reveal').textContent = 'Show meaning';
-  document.querySelector('#vocab-progress').textContent = `Card ${vocabIndex + 1} of ${deck.length} · Known: ${knownCount}`;
-}
-fetch('/static/vocabulary.json').then(response => {
-  if (!response.ok) throw new Error('Vocabulary list unavailable');
-  return response.json();
-}).then(data => { vocabulary = data; showVocabCard(); }).catch(() => { vocabWord.textContent = 'Vocabulary could not load.'; });
-vocabLevel.addEventListener('change', () => { vocabIndex = 0; showVocabCard(); });
-document.querySelector('#vocab-reveal').addEventListener('click', () => { vocabMeaning.hidden = false; document.querySelector('#vocab-reveal').textContent = 'Meaning shown'; });
-document.querySelector('#vocab-next').addEventListener('click', () => { vocabIndex++; showVocabCard(); });
-document.querySelector('#vocab-known').addEventListener('click', () => {
-  knownCount++; localStorage.setItem('sakura-vocab-known', String(knownCount)); vocabIndex++; showVocabCard();
-});
+const photo=$('#photo'),preview=$('#preview'),recognizeButton=$('#recognize'),japanese=$('#japanese'),readings=$('#readings'),addButton=$('#add'),phrase=$('#phrase');
+async function recognizeImage(file){recognizeButton.disabled=true;setStatus('Reading hiragana…');try{const form=new FormData();form.append('image',file);const response=await fetch('/api/recognize',{method:'POST',body:form,credentials:'same-origin'});const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not read this image.');japanese.value=data.kana||'';readings.replaceChildren();if(data.readings.length){for(const r of data.readings){const row=document.createElement('div');row.className='reading';row.textContent=`${r.kana} · ${r.pronunciation} · ${Math.round(r.confidence*100)}% · alternatives: ${r.alternatives.slice(1).map(a=>`${a.kana} ${Math.round(a.confidence*100)}%`).join(', ')}`;readings.append(row);}}else readings.textContent='No hiragana found. Try a closer, brighter photo.';addButton.disabled=!japanese.value.trim();if(data.kana){if(state.autoPhrase&&phrase.value.endsWith(state.autoPhrase))phrase.value=phrase.value.slice(0,-state.autoPhrase.length)+data.kana;else phrase.value+=data.kana;state.autoPhrase=data.kana;addButton.textContent='Update phrase';setStatus('Reading added to your phrase. Check or correct it before translating.','success');}else setStatus('No hiragana recognized. Type or correct the Japanese text.','error');}catch(e){setStatus(e.message,'error');}finally{recognizeButton.disabled=!photo.files?.[0];}}
+photo.addEventListener('change',()=>{const file=photo.files?.[0];if(!file)return;if(preview.dataset.url)URL.revokeObjectURL(preview.dataset.url);preview.dataset.url=URL.createObjectURL(file);preview.src=preview.dataset.url;preview.hidden=false;recognizeButton.disabled=false;setStatus('Photo ready. Tap Read photo.');});recognizeButton.addEventListener('click',()=>photo.files?.[0]&&recognizeImage(photo.files[0]));
+const pad=$('#drawing-pad'),pen=pad.getContext('2d');let strokes=[],activeStroke=null,inkColor='#171717',erasing=false;
+function redrawPad(){const rect=pad.getBoundingClientRect(),w=rect.width,h=rect.height,dpr=window.devicePixelRatio||1;if(!w||!h)return;if(pad.width!==Math.round(w*dpr)||pad.height!==Math.round(h*dpr)){pad.width=Math.round(w*dpr);pad.height=Math.round(h*dpr);}pen.setTransform(dpr,0,0,dpr,0,0);pen.clearRect(0,0,w,h);pen.fillStyle='#fff';pen.fillRect(0,0,w,h);for(const s of [...strokes,...(activeStroke?[activeStroke]:[])]){const xy=p=>[p.x*w,p.y*h];pen.beginPath();pen.lineCap='round';pen.lineJoin='round';pen.strokeStyle=s.color;pen.fillStyle=s.color;pen.lineWidth=s.width;const [x0,y0]=xy(s.points[0]);pen.moveTo(x0,y0);if(s.points.length===1){pen.arc(x0,y0,s.width/2,0,Math.PI*2);pen.fill();continue;}for(let i=1;i<s.points.length;i++){const [x1,y1]=xy(s.points[i-1]),[x2,y2]=xy(s.points[i]);pen.quadraticCurveTo(x1,y1,(x1+x2)/2,(y1+y2)/2);}const [x,y]=xy(s.points[s.points.length-1]);pen.lineTo(x,y);pen.stroke();}}
+function canvasPoint(e){const r=pad.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};}
+pad.addEventListener('pointerdown',e=>{e.preventDefault();pad.setPointerCapture(e.pointerId);activeStroke={points:[canvasPoint(e)],color:erasing?'#fff':inkColor,width:erasing?24:8};redrawPad();});pad.addEventListener('pointermove',e=>{if(activeStroke&&e.buttons){activeStroke.points.push(canvasPoint(e));redrawPad();}});function finishStroke(){if(activeStroke)strokes.push(activeStroke);activeStroke=null;redrawPad();}pad.addEventListener('pointerup',finishStroke);pad.addEventListener('pointercancel',finishStroke);window.addEventListener('resize',redrawPad);new ResizeObserver(redrawPad).observe(pad);
+$('#draw-color').addEventListener('click',e=>{inkColor=inkColor==='#171717'?'#315fd4':'#171717';erasing=false;e.currentTarget.textContent=inkColor==='#171717'?'Ink: black':'Ink: blue';$('#draw-eraser').setAttribute('aria-pressed','false');$('#draw-eraser').textContent='Eraser';});$('#draw-eraser').addEventListener('click',e=>{erasing=!erasing;e.currentTarget.setAttribute('aria-pressed',String(erasing));e.currentTarget.textContent=erasing?'Eraser: on':'Eraser';});$('#draw-undo').addEventListener('click',()=>{strokes.pop();redrawPad();});$('#draw-clear').addEventListener('click',()=>{strokes=[];activeStroke=null;redrawPad();});$('#read-drawing').addEventListener('click',()=>{finishStroke();if(!strokes.length){setStatus('Draw one hiragana character first.','error');return;}pad.toBlob(blob=>blob?recognizeImage(new File([blob],'hiragana.png',{type:'image/png'})):setStatus('Could not prepare the drawing.','error'),'image/png');});
+function appendPhrase(text){const current=phrase.value;if(state.autoPhrase&&current.endsWith(state.autoPhrase))phrase.value=current.slice(0,-state.autoPhrase.length)+text;else phrase.value+=text;state.autoPhrase='';addButton.textContent='Add to phrase';}
+$('#add').addEventListener('click',()=>{if(japanese.value.trim()){appendPhrase(japanese.value.trim());setStatus('Added to phrase.','success');}});
+async function translateText(text){if(!text.trim()){setStatus('Enter Japanese text before translating.','error');return null;}setStatus('Translating on this PC…');try{const data=await api('/api/translate',{method:'POST',body:JSON.stringify({text})});$('#english').textContent=data.translation||'(No translation returned)';setStatus('Translation ready.','success');return data.translation;}catch(e){setStatus(e.message,'error');return null;}}
+$('#translate-line').addEventListener('click',()=>translateText(japanese.value));$('#translate-phrase').addEventListener('click',()=>translateText(phrase.value));$('#undo').addEventListener('click',()=>phrase.value=Array.from(phrase.value).slice(0,-1).join(''));$('#clear').addEventListener('click',()=>{phrase.value='';state.autoPhrase='';$('#english').textContent='Your translation will appear here.';});$('#speak-japanese').addEventListener('click',()=>speak(japanese.value.trim()));$('#speak-english').addEventListener('click',()=>speak($('#english').textContent,'en-US'));$('#copy-translation').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('#english').textContent);setStatus('Translation copied.','success');}catch{setStatus('Clipboard unavailable in this browser.','error');}});
+let lastAction=Date.now();for(const event of ['pointerdown','keydown','touchstart','click'])window.addEventListener(event,()=>{lastAction=Date.now();},{passive:true});
+setInterval(()=>{if(document.visibilityState==='visible'&&document.hasFocus()&&Date.now()-lastAction<90000){api('/api/v1/study/tick',{method:'POST',body:JSON.stringify({seconds:30})}).then(refreshDashboard).catch(()=>{});}},30000);
+loadInitial();redrawPad();

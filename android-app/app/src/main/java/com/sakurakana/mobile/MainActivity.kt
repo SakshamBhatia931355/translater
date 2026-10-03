@@ -127,6 +127,15 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         connectCard.addView(accessCodeField, matchWrap(top = 8))
         connectCard.addView(button("Connect", true) { connectToPc() }, matchWrap(top = 9))
+        connectCard.addView(button("Open full learning site", false) {
+            val base = baseUrl()
+            if (base == null) showStatus("Enter the PC server address first, then open the learning site.", true)
+            else try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("$base/")))
+            } catch (_: Exception) {
+                showStatus("No browser is available to open the learning site.", true)
+            }
+        }, matchWrap(top = 8))
         status = text("Enter the PC server address and connect.", 13, muted)
         connectCard.addView(status, matchWrap(top = 7))
         page.addView(connectCard, matchWrap(top = 16))

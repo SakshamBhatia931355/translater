@@ -1,88 +1,53 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff">
-  <title>Japanese Practice</title>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fffaf9"><title>Kotoba — Japanese practice</title>
+  <link rel="manifest" href="/static/manifest.webmanifest"><link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', filename='mobile.css') }}">
   <script src="{{ url_for('static', filename='mobile.js') }}" defer></script>
 </head>
 <body>
-  <main class="shell">
-    <header class="hero">
-      <p class="eyebrow">JAPANESE · YOUR DAILY PRACTICE</p>
-      <h1>Speak Japanese</h1>
-      <p>Short speaking and writing practice, with a translation when you need one.</p>
-    </header>
+  <div class="app-frame">
+    <header class="topbar"><a class="brand" href="#home-section" aria-label="Kotoba home"><span class="brand-mark" lang="ja">ことば</span><span>Kotoba <small>Japanese practice</small></span></a><div class="top-actions"><span id="connection-badge" class="connection-badge">Checking tutor…</span><button id="theme-toggle" class="icon-button" type="button" aria-label="Toggle dark mode">◐</button></div></header>
+    <nav class="side-nav" aria-label="Main navigation"><a href="#home-section" data-nav="home-section" class="active">Home</a><a href="#speak-section" data-nav="speak-section">Speak</a><a href="#learn-section" data-nav="learn-section">Learn</a><a href="#write-section" data-nav="write-section">Write</a><a href="#progress-section" data-nav="progress-section">Progress</a><a href="#profile-section" data-nav="profile-section">Profile</a></nav>
+    <main class="main-content">
+      <section id="home-section" class="page-section">
+        <div class="welcome-row"><div><p class="eyebrow">YOUR JAPANESE, AT YOUR PACE</p><h1>こんにちは<span id="greeting-name"></span></h1><p class="lead">A small step today makes tomorrow's Japanese easier.</p></div><button id="edit-goals" class="button subtle" type="button">Your learning plan</button></div>
+        <div class="goal-card"><div><p class="eyebrow">TODAY'S STUDY GOAL</p><h2><span id="today-minutes">0</span> <small>of</small> <span id="goal-minutes">10</span> <small>minutes</small></h2><p id="goal-message" class="muted">Your active practice time will appear here.</p></div><div class="goal-ring" id="goal-ring" role="img" aria-label="Daily goal progress"><span id="goal-percent">0%</span></div></div>
+        <div class="metric-grid"><article class="metric-card"><span class="metric-icon">火</span><p>Study streak</p><strong><span id="streak-days">0</span> days</strong></article><article class="metric-card"><span class="metric-icon">文</span><p>Lessons done</p><strong id="lessons-done">0</strong></article><article class="metric-card"><span class="metric-icon">語</span><p>Words mastered</p><strong id="words-mastered">0</strong></article><article class="metric-card"><span class="metric-icon">↻</span><p>Review due</p><strong id="words-due">0</strong></article></div>
+        <div class="home-grid"><article class="panel next-card"><div class="section-heading"><div><p class="eyebrow">A GOOD NEXT STEP</p><h2 id="next-title">Choose a practice</h2></div><span class="level-chip" id="current-level">N5</span></div><p id="next-copy" class="muted">Your plan will suggest a lesson based on your level.</p><button id="next-action" class="button primary" data-target="learn-section" type="button">Explore lessons <span aria-hidden="true">→</span></button></article><article class="panel word-of-day"><p class="eyebrow">WORD TO NOTICE</p><p id="daily-word" class="daily-word" lang="ja">水</p><p id="daily-reading" class="muted" lang="ja">みず · mizu</p><p id="daily-meaning">water</p><button id="daily-speak" class="text-button" type="button">Hear this word</button></article></div>
+        <article class="panel recent-panel"><div class="section-heading"><div><p class="eyebrow">PICK UP WHERE YOU LEFT OFF</p><h2>Recent activity</h2></div></div><div id="recent-activity" class="activity-list"><p class="empty-state">Your learning activity will appear here as you practice.</p></div></article>
+      </section>
 
-    <nav class="practice-nav" aria-label="Practice sections">
-      <a href="#voice-section">Speak</a><a href="#write-section">Write</a><a href="#learn-section">Learn</a>
-    </nav>
+      <section id="speak-section" class="page-section" hidden>
+        <div class="page-intro"><p class="eyebrow">SPEAK · REAL-LIFE PRACTICE</p><h1>Practice a conversation</h1><p class="lead">Choose a scene, speak or type, and take your time. Voice transcription is not pronunciation scoring.</p></div>
+        <div class="panel scenario-picker"><div class="section-heading"><div><p class="eyebrow">YOUR SCENE</p><h2>Where do you want to practice?</h2></div></div><div id="scenario-list" class="scenario-grid"><p class="empty-state">Loading scenarios…</p></div><div class="practice-mode"><span id="tutor-mode-label">Checking tutor…</span><label class="switch-label"><input id="guided-mode" type="checkbox"><span>Use guided scripted practice</span></label></div></div>
+        <div id="conversation-panel" class="panel conversation-panel" hidden><div class="section-heading"><div><p class="eyebrow" id="scenario-level">N5 · PRACTICE</p><h2 id="scenario-title">Conversation</h2></div><button id="finish-conversation" class="button subtle" type="button">Finish session</button></div><p id="scenario-goal" class="muted"></p><p id="conversation-notice" class="notice"></p><div id="conversation" class="conversation" aria-live="polite"></div><div id="suggestions" class="suggestion-list"></div><div class="composer"><button id="tutor-listen" class="button" type="button" aria-label="Speak a Japanese response">🎙</button><input id="tutor-input" class="text-input japanese" lang="ja" autocomplete="off" placeholder="Type a Japanese response"><button id="send-turn" class="button primary" type="button">Send</button></div><p id="voice-status" class="hint" role="status" aria-live="polite">Voice recognition depends on your browser and microphone permissions.</p><div id="session-report" class="session-report" hidden></div></div>
+        <div class="panel history-panel"><h2>Recent conversations</h2><div id="conversation-history" class="activity-list"><p class="empty-state">Completed sessions will be saved here.</p></div></div>
+      </section>
 
-    <section id="voice-section" class="panel voice-panel" aria-labelledby="voice-heading">
-      <div class="section-heading"><div><p class="eyebrow">01 · SPEAK</p><h2 id="voice-heading">Say it in Japanese</h2></div><span class="level-chip">Voice practice</span></div>
-      <p class="hint">Tap the microphone, say a phrase, then translate it. You can edit the recognized text first.</p>
-      <div id="conversation" class="conversation" aria-live="polite">
-        <div class="bubble assistant-bubble"><p>Try introducing yourself or saying something you need.</p><span>Japanese speaking practice</span></div>
-      </div>
-      <div class="voice-controls">
-        <button id="voice-listen" class="button primary mic-button" type="button"><span aria-hidden="true">●</span> Speak Japanese</button>
-        <button id="voice-translate" class="button" type="button">Translate spoken words</button>
-      </div>
-      <p id="voice-status" class="hint" role="status" aria-live="polite">Microphone access is requested when you tap Speak Japanese.</p>
-      <div class="voice-result-actions"><button id="voice-hear-japanese" class="text-button" type="button">Hear Japanese</button><button id="speak" class="text-button" type="button">Hear English</button></div>
-    </section>
+      <section id="learn-section" class="page-section" hidden>
+        <div class="page-intro"><p class="eyebrow">LEARN · LESSONS & VOCABULARY</p><h1>Build your Japanese</h1><p class="lead">Short, resumable practice for scripts, grammar, and everyday language.</p></div>
+        <div class="panel"><div class="section-heading"><div><p class="eyebrow">YOUR LEARNING PATH</p><h2>Starter lessons</h2></div><label class="inline-select">Level <select id="lesson-level" class="text-input"><option>N5</option><option>N4</option><option>N3</option><option>N2</option><option>N1</option></select></label></div><p class="notice">These are curated starter lessons, not a complete or official JLPT curriculum.</p><div id="lesson-list" class="lesson-list"><p class="empty-state">Loading lessons…</p></div><div id="lesson-view" class="lesson-view" hidden></div></div>
+        <div class="panel vocab-study"><div class="section-heading"><div><p class="eyebrow">SPACED REVIEW</p><h2>Words due to revisit</h2></div><label class="inline-select">Deck <select id="vocab-level" class="text-input"><option>N5</option><option>N4</option><option>N3</option><option>N2</option><option>N1</option></select></label></div><p class="muted">Your ratings schedule the next review. Starter cards are not a complete official JLPT list.</p><div id="review-card" class="review-card"><p class="empty-state">Loading review cards…</p></div><div id="review-actions" class="review-actions" hidden><button class="button rating-again" data-rating="again" type="button">Again · 10 min</button><button class="button" data-rating="hard" type="button">Hard</button><button class="button" data-rating="good" type="button">Good</button><button class="button" data-rating="easy" type="button">Easy</button></div><button id="bookmark-word" class="text-button" type="button" hidden>☆ Save word</button><button id="srs-speak" class="text-button" type="button" hidden>Hear word</button><p id="review-status" class="hint" role="status"></p><details class="custom-word"><summary>Add a word to My words</summary><form id="custom-word-form" class="form-grid"><label>Japanese<input name="word" class="text-input japanese" required maxlength="80"></label><label>Reading<input name="reading" class="text-input" required maxlength="100"></label><label>Meaning<input name="meaning" class="text-input" required maxlength="180"></label><label>Level<select name="level" class="text-input"><option>N5</option><option>N4</option><option>N3</option><option>N2</option><option>N1</option></select></label><button class="button primary" type="submit">Save word</button></form></details></div>
+      </section>
 
-    <section id="write-section" class="panel" aria-labelledby="write-heading">
-      <div class="section-heading"><div><p class="eyebrow">02 · WRITE</p><h2 id="write-heading">Write or photograph kana</h2></div></div>
-      <p class="hint">The handwriting model reads hiragana. For katakana or kanji, type or correct the result below.</p>
-      <div class="draw-area">
-        <canvas id="drawing-pad" aria-label="Draw a Japanese character"></canvas>
-        <div class="draw-tools">
-          <button id="draw-color" class="button" type="button">Ink: black</button>
-          <button id="draw-eraser" class="button" type="button">Eraser</button>
-          <button id="draw-undo" class="button" type="button">Undo</button>
-          <button id="draw-clear" class="button" type="button">Clear</button>
-        </div>
-        <button id="read-drawing" class="button primary full-button" type="button">Read drawing</button>
-      </div>
-      <div class="divider-label"><span>or use a photo</span></div>
-      <label class="button upload-button">Take photo / choose image
-        <input id="photo" type="file" accept="image/*" capture="environment">
-      </label>
-      <img id="preview" alt="Selected handwriting preview" hidden>
-      <button id="recognize" class="button full-button" type="button" disabled>Read photo</button>
+      <section id="write-section" class="page-section" hidden>
+        <div class="page-intro"><p class="eyebrow">WRITE · RECOGNIZE · TRANSLATE</p><h1>Read your handwriting</h1><p class="lead">Upload a photo or draw one hiragana character. Check uncertain readings before translating.</p></div>
+        <div class="write-grid"><article class="panel"><h2>Draw or choose a photo</h2><p class="muted">The handwriting classifier reads hiragana only. You can type or correct kanji, katakana and mixed Japanese in the editor.</p><div class="draw-area"><canvas id="drawing-pad" aria-label="Draw a Japanese character"></canvas><div class="draw-tools"><button id="draw-color" class="button" type="button">Ink: black</button><button id="draw-eraser" class="button" type="button" aria-pressed="false">Eraser</button><button id="draw-undo" class="button" type="button">Undo</button><button id="draw-clear" class="button" type="button">Clear</button></div><button id="read-drawing" class="button primary full-button" type="button">Read drawing</button></div><label class="button upload-button">Take photo / choose image<input id="photo" type="file" accept="image/*" capture="environment"></label><img id="preview" alt="Selected handwriting preview" hidden><button id="recognize" class="button full-button" type="button" disabled>Read photo</button><p id="status" class="status" role="status" aria-live="polite">Draw a character or choose a photo to begin.</p></article><article class="panel"><p class="eyebrow">CHECK THE READING</p><h2>Japanese text</h2><div id="readings" class="readings hint">Recognition suggestions will appear here.</div><label for="japanese">Edit recognized text</label><input id="japanese" class="text-input japanese" type="text" lang="ja" autocomplete="off" placeholder="Type or correct Japanese"><div class="actions"><button id="add" class="button" type="button" disabled>Add to phrase</button><button id="translate-line" class="button primary" type="button">Translate this line</button></div><hr><p class="eyebrow">TRANSLATION</p><h2>Meaning in English</h2><div class="actions"><button id="copy-translation" class="button" type="button">Copy</button><button id="speak-japanese" class="button" type="button">Hear Japanese</button><button id="speak-english" class="button" type="button">Hear English</button></div><p id="english" class="english">Your translation will appear here.</p><label for="phrase">Phrase builder</label><textarea id="phrase" class="text-input japanese" lang="ja" rows="2" placeholder="Recognized text is added here"></textarea><div class="actions"><button id="translate-phrase" class="button primary" type="button">Translate phrase</button><button id="undo" class="button" type="button">Undo</button><button id="clear" class="button" type="button">Clear</button></div><p id="translation-history" class="hint"></p></article></div>
+      </section>
 
-      <div class="recognition-block">
-        <div class="section-heading compact-heading"><div><p class="eyebrow">CHECK THE READING</p><h3>Japanese text</h3></div></div>
-        <div id="readings" class="readings hint">Recognition suggestions will appear here.</div>
-        <label for="japanese">Edit the recognized text</label>
-        <input id="japanese" class="text-input japanese" type="text" lang="ja" autocomplete="off" placeholder="Type or correct Japanese">
-        <div class="actions"><button id="add" class="button" type="button" disabled>Add to phrase</button><button id="translate-line" class="button primary" type="button">Translate this line</button></div>
-      </div>
-      <p id="status" class="status" role="status" aria-live="polite">Draw a character or choose a photo to begin.</p>
-    </section>
+      <section id="progress-section" class="page-section" hidden>
+        <div class="page-intro"><p class="eyebrow">PROGRESS · BASED ON YOUR ACTIVITY</p><h1>Your learning rhythm</h1><p class="lead">Only completed lessons, saved reviews, and active practice time count here.</p></div>
+        <article class="panel"><div class="section-heading"><div><p class="eyebrow">LAST SEVEN DAYS</p><h2>Active practice minutes</h2></div></div><div id="week-chart" class="week-chart" aria-label="Practice minutes by day"></div><p class="hint">Time is estimated while this page is open, focused, and recently active.</p></article><div class="metric-grid progress-metrics"><article class="metric-card"><p>Total active practice</p><strong><span id="total-minutes">0</span> min</strong></article><article class="metric-card"><p>Conversation sessions</p><strong id="conversation-count">0</strong></article><article class="metric-card"><p>Cards reviewed</p><strong id="cards-reviewed">0</strong></article><article class="metric-card"><p>Best lesson score</p><strong id="best-score">—</strong></article></div><div class="actions"><a class="button" href="/api/v1/export">Export learning data</a><button id="delete-data" class="button danger" type="button">Reset my learning data</button></div>
+      </section>
 
-    <section class="panel" aria-labelledby="translate-heading">
-      <div class="section-heading"><div><p class="eyebrow">03 · TRANSLATE</p><h2 id="translate-heading">Build a phrase</h2></div></div>
-      <label for="translation-type">What are you translating?</label>
-      <select id="translation-type" class="text-input type-select"><option value="word">Word</option><option value="phrase" selected>Phrase</option><option value="sentence">Sentence</option><option value="line">Recognized line</option></select>
-      <p class="hint phrase-label">Your phrase</p><p id="phrase" class="phrase">(empty)</p>
-      <div class="actions"><button id="translate-phrase" class="button primary" type="button">Translate selection</button><button id="undo" class="button" type="button">Undo</button><button id="clear" class="button" type="button">Clear</button></div>
-      <div class="translation-result"><p class="eyebrow">ENGLISH MEANING</p><p id="english" class="english">Your translation will appear here.</p></div>
-    </section>
-
-    <section id="learn-section" class="panel" aria-labelledby="vocab-heading">
-      <div class="section-heading"><div><p class="eyebrow">04 · LEARN</p><h2 id="vocab-heading">Vocabulary, one level at a time</h2></div></div>
-      <p class="hint">Starter cards with Japanese, reading, and meaning. Choose a study level.</p>
-      <label for="vocab-level">JLPT study level</label>
-      <select id="vocab-level" class="text-input type-select"><option value="N5">N5 · Beginner</option><option value="N4">N4 · Elementary</option><option value="N3">N3 · Intermediate</option><option value="N2">N2 · Upper intermediate</option><option value="N1">N1 · Advanced</option></select>
-      <div class="vocab-card" aria-live="polite"><span id="vocab-level-label" class="level-chip">N5</span><p id="vocab-word" class="vocab-word"></p><p id="vocab-reading" class="vocab-reading"></p><p id="vocab-meaning" class="vocab-meaning" hidden></p></div>
-      <p id="vocab-progress" class="hint progress-copy">Card 1</p>
-      <div class="actions"><button id="vocab-reveal" class="button primary" type="button">Show meaning</button><button id="vocab-known" class="button" type="button">I knew it</button><button id="vocab-next" class="button" type="button">Next word</button></div>
-    </section>
-    <footer>Remote practice works while this PC is online and the public practice link is running.</footer>
-  </main>
-</body>
-</html>
+      <section id="profile-section" class="page-section" hidden>
+        <div class="page-intro"><p class="eyebrow">PROFILE · YOUR PREFERENCES</p><h1>Your learning plan</h1><p class="lead">Update your level, goals, daily target, and script familiarity at any time.</p></div><div class="panel"><form id="profile-form" class="form-grid"><label>Display name<input name="display_name" class="text-input" maxlength="60" placeholder="What should we call you?"></label><label>Display language<select name="display_language" class="text-input"><option value="en">English</option></select></label><label>Japanese level<select name="jlpt_level" class="text-input"><option>N5</option><option>N4</option><option>N3</option><option>N2</option><option>N1</option></select></label><label>Learning goal<select name="learning_goal" class="text-input"><option value="general">General fluency</option><option value="conversation">Conversation</option><option value="travel">Travel</option><option value="jlpt">JLPT study</option><option value="reading">Reading</option><option value="writing">Writing</option></select></label><label>Daily target<select name="daily_minutes" class="text-input"><option>5</option><option>10</option><option>15</option><option>20</option><option>30</option></select></label><label>Practice style<select name="practice_style" class="text-input"><option value="balanced">Balanced</option><option value="speaking">Speaking</option><option value="reading">Reading</option><option value="writing">Writing</option><option value="structured">Structured lessons</option></select></label><label>Hiragana familiarity<select name="hiragana_familiar" class="text-input"><option value="0">New to me</option><option value="1">I know some</option><option value="2">Comfortable</option></select></label><label>Katakana familiarity<select name="katakana_familiar" class="text-input"><option value="0">New to me</option><option value="1">I know some</option><option value="2">Comfortable</option></select></label><label>Kanji familiarity<select name="kanji_familiar" class="text-input"><option value="0">New to me</option><option value="1">I know some</option><option value="2">Comfortable</option></select></label><button class="button primary" type="submit">Save preferences</button><p id="profile-status" class="hint" role="status"></p></form></div><article class="panel privacy-card"><h2>Privacy and this device</h2><p>Learning activity is stored in the local SQLite database on the PC running this app. A PIN-protected phone link shares the same single-learner profile. The handwriting and translation models run on the PC. If an AI API key is configured, conversation text is sent to that provider; otherwise the guided role-play is scripted.</p><p>Speech recognition is provided by the browser or device. It may use a separate platform service. This app does not grade pronunciation.</p><p id="version-capabilities" class="hint"></p></article></section>
+    </main>
+    <footer class="app-footer">Kotoba Practice · Curated starter material · Not affiliated with Pingo AI or SakuraSpeak</footer>
+  </div>
+  <nav class="mobile-nav" aria-label="Mobile navigation"><a href="#home-section" data-nav="home-section" class="active">⌂<small>Home</small></a><a href="#speak-section" data-nav="speak-section">◖<small>Speak</small></a><a href="#learn-section" data-nav="learn-section">文<small>Learn</small></a><a href="#write-section" data-nav="write-section">✎<small>Write</small></a><a href="#progress-section" data-nav="progress-section">↗<small>Progress</small></a><a href="#profile-section" data-nav="profile-section">○<small>Profile</small></a></nav>
+  <dialog id="onboarding-dialog" class="onboarding-dialog"><form id="onboarding-form" method="dialog" class="panel onboarding-card"><button id="skip-onboarding" class="dialog-close" type="button" aria-label="Close setup">×</button><p class="eyebrow">A PLAN THAT FITS YOU</p><h2>Set up your Japanese practice</h2><p class="muted">This is optional. You can explore first or change these preferences later.</p><div class="form-grid"><label>Japanese level<select name="jlpt_level" class="text-input"><option>N5</option><option>N4</option><option>N3</option><option>N2</option><option>N1</option></select></label><label>Learning goal<select name="learning_goal" class="text-input"><option value="general">General fluency</option><option value="conversation">Conversation</option><option value="travel">Travel</option><option value="jlpt">JLPT study</option><option value="reading">Reading</option><option value="writing">Writing</option></select></label><label>Daily target<select name="daily_minutes" class="text-input"><option>5</option><option selected>10</option><option>15</option><option>20</option><option>30</option></select></label><label>Preferred practice<select name="practice_style" class="text-input"><option value="balanced">Balanced</option><option value="speaking">Speaking</option><option value="reading">Reading</option><option value="writing">Writing</option><option value="structured">Structured lessons</option></select></label></div><div class="actions"><button id="save-onboarding" class="button primary" type="submit">Save my plan</button><button id="explore-first" class="button" type="button">Explore first</button></div><p id="onboarding-status" class="hint" role="status"></p></form></dialog>
+</body></html>

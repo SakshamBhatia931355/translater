@@ -105,7 +105,8 @@ def main() -> int:
         exe = cloudflared_path()
         server = subprocess.Popen(
             [sys.executable, str(ROOT / "src" / "mobile_server.py"), "--host", "127.0.0.1",
-             "--port", str(PORT), "--access-code", code],
+             "--port", str(PORT)],
+            env={**os.environ, "SAKURA_ACCESS_CODE": code},
             cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )

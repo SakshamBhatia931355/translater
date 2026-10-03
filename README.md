@@ -1,5 +1,7 @@
 # Kana Reader and English Translator
 
+> **Project status:** this repository now includes a local single-learner Japanese practice site alongside the original recognizer, translator, and Android utility. It is a useful self-hosted learning prototype, not a production hosted service or a complete JLPT curriculum. See “Learning site” below for what it can and cannot currently assess.
+
 This Windows desktop app recognizes handwritten hiragana from a webcam or an uploaded image. Uploads can contain a spaced line of kana; the app separates characters, shows alternatives and confidence, and lets you edit the Japanese line before adding it. It can speak the English translation, which runs locally with the offline Japanese-to-English model.
 
 This is handwritten Japanese character recognition, not sign-language recognition. The camera classifier predicts one hiragana at a time. A single kana such as お has a sound (o) rather than a standalone English word; English translation needs a meaningful captured word or phrase.
@@ -65,6 +67,24 @@ The mobile page runs in Chrome on Android while this PC runs the recognition and
 Find the PC's Wi-Fi IPv4 address with `ipconfig`, then open `http://<PC-IPv4-address>:5055` on the phone, for example `http://192.168.1.24:5055`. Tap **Take photo / choose image** to use the Android camera or gallery. Keep the server window open while using the page. The browser uses speech recognition and speech synthesis provided by the phone browser; voice recognition generally requires HTTPS, which the public link provides.
 
 This is a phone-friendly browser app; the PyTorch model stays on the PC. If Windows asks, allow Python access on the private network so the phone can connect.
+
+## Learning site
+
+Start the responsive learning site and API on this PC:
+
+    .\.venv\Scripts\python.exe src\mobile_server.py
+
+Open `http://127.0.0.1:5055` on the PC, or use the PC's local Wi-Fi address on a phone. The new web learning area has an optional profile setup, daily study dashboard, curated starter lessons, lesson attempts, learner-created vocabulary, spaced reviews, guided role-play, drawing/photo practice, progress summaries, and JSON export/reset. Learning records live in `instance\japanese_practice.sqlite3`; they are local to this PC and shared by visitors to this server. It is a single-learner local profile, not a multi-user account service.
+
+The role-play is visibly labelled **Guided** when no AI credentials are configured. Those scenes accept suggested responses and do not grade arbitrary sentences. To enable the optional server-side OpenAI text tutor, set `OPENAI_API_KEY` in this PC's environment before starting the server; optionally set `OPENAI_MODEL` to a model available to your account. The key is read on the PC and is not embedded in the browser or APK. Without the key, the rest of the learning site still works. AI-provider behavior has not been validated here because no key was supplied.
+
+The starter lesson library currently contains a small set of curated N5 lessons, not a full N5–N1 sequence. The native Android app retains its camera/drawing/translation tools and now includes a button to open this full learning site in the phone browser. Browser speech recognition depends on the browser and device; no pronunciation scoring is implemented. Handwriting photo recognition remains hiragana-only; correct the reading or type kanji/katakana before translating.
+
+Run the API regression checks from the project root:
+
+    .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+
+The login form has CSRF protection and temporary in-memory rate limiting. For cross-network access, use the desktop app's protected temporary tunnel. The server and this PC must stay online; the generated link is temporary. Do not expose the Flask development server directly to the public internet or share the link/PIN publicly.
 
 ### Internet link for phone access
 
