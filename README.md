@@ -62,9 +62,15 @@ The mobile page runs in Chrome on Android while this PC runs the recognition and
     cd translater
     .\.venv\Scripts\python.exe src\mobile_server.py
 
-Find the PC's Wi-Fi IPv4 address with `ipconfig`, then open `http://<PC-IPv4-address>:5055` on the phone, for example `http://192.168.1.24:5055`. Tap **Take photo / choose image** to use the Android camera or gallery. Keep the server window open while using the page. The page offers word, phrase, sentence, and recognized-line translation choices, plus offline N5–N1 flashcards with readings, meanings, and a locally saved known-word count. It uses Android browser speech for **Speak English**.
+Find the PC's Wi-Fi IPv4 address with `ipconfig`, then open `http://<PC-IPv4-address>:5055` on the phone, for example `http://192.168.1.24:5055`. Tap **Take photo / choose image** to use the Android camera or gallery. Keep the server window open while using the page. The browser uses speech recognition and speech synthesis provided by the phone browser; voice recognition generally requires HTTPS, which the public link provides.
 
 This is a phone-friendly browser app; the PyTorch model stays on the PC. If Windows asks, allow Python access on the private network so the phone can connect.
+
+### Internet link for phone access
+
+From the Windows desktop app, click **Start anywhere link**. On first use it downloads the official Cloudflare Tunnel client, then starts the local Flask server behind a temporary HTTPS tunnel protected by an eight-digit PIN. Enter the link and PIN in the Android app, or open the link in the phone browser and enter the PIN on the sign-in page. This works across different Wi-Fi networks and mobile data; neither device needs to be on the same network.
+
+The PC must stay powered on, online, and running the app/server. The free Quick Tunnel address is temporary and may change after a restart or network interruption; start a new link and reconnect with its new URL/PIN. The model still runs on the PC. Do not post the link or PIN publicly.
 
 ### Native Android app
 
@@ -73,7 +79,7 @@ The Android Studio project is `android-app`. The ready-to-install debug APK is `
     cd android-app
     .\gradlew.bat assembleDebug
 
-The APK is written to `android-app\app\build\outputs\apk\debug\app-debug.apk`. The app can take or choose a photo, draw one kana with blue or black ink, crop the drawing to its ink bounds, send it to the PC recognizer, let you correct the Japanese, select word, phrase, sentence, or recognized-line translation, and speak the English result. It also includes offline N5–N1 vocabulary flashcards and saves the known-word count on the phone. The model still runs on the PC. Start it from the desktop app's **Start phone server** button, then enter the shown PC URL in the Android app and tap **Connect**. Both devices must be on the same local network. This debug app allows HTTP because the local PC server does not use HTTPS; use it only with your own trusted LAN.
+The APK is written to `android-app\app\build\outputs\apk\debug\app-debug.apk`. The app can take or choose a photo, draw one kana with blue or black ink, crop the drawing to its ink bounds, send it to the PC recognizer, let you correct the Japanese, select word, phrase, sentence, or recognized-line translation, and speak the English result. It also includes offline N5–N1 vocabulary flashcards and saves the known-word count on the phone. The model still runs on the PC. Start **Start phone server** for local Wi-Fi or **Start anywhere link** for internet access. Enter the displayed URL and, for the public tunnel, the PIN in the app. Android voice input uses the phone's installed Japanese recognition service; the external recognition activity handles microphone access.
 
 ## Upload and single-image recognition
 

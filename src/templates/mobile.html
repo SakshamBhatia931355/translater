@@ -3,55 +3,86 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#d94f83">
-  <title>Sakura Kana</title>
+  <meta name="theme-color" content="#ffffff">
+  <title>Japanese Practice</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='mobile.css') }}">
   <script src="{{ url_for('static', filename='mobile.js') }}" defer></script>
 </head>
 <body>
   <main class="shell">
-    <header><div class="brand"><span aria-hidden="true">✿</span><h1>Sakura Kana</h1></div>
-      <p>Read Japanese, build a phrase, and hear what it means.</p></header>
+    <header class="hero">
+      <p class="eyebrow">JAPANESE · YOUR DAILY PRACTICE</p>
+      <h1>Speak Japanese</h1>
+      <p>Short speaking and writing practice, with a translation when you need one.</p>
+    </header>
 
-    <section class="card camera-card" aria-labelledby="camera-heading">
-      <h2 id="camera-heading">1 · Take or choose a photo</h2>
-      <p class="hint">Write separated hiragana in dark ink on light paper, then center it in the frame.</p>
-      <label class="button primary upload-button">Take photo / choose image
+    <nav class="practice-nav" aria-label="Practice sections">
+      <a href="#voice-section">Speak</a><a href="#write-section">Write</a><a href="#learn-section">Learn</a>
+    </nav>
+
+    <section id="voice-section" class="panel voice-panel" aria-labelledby="voice-heading">
+      <div class="section-heading"><div><p class="eyebrow">01 · SPEAK</p><h2 id="voice-heading">Say it in Japanese</h2></div><span class="level-chip">Voice practice</span></div>
+      <p class="hint">Tap the microphone, say a phrase, then translate it. You can edit the recognized text first.</p>
+      <div id="conversation" class="conversation" aria-live="polite">
+        <div class="bubble assistant-bubble"><p>Try introducing yourself or saying something you need.</p><span>Japanese speaking practice</span></div>
+      </div>
+      <div class="voice-controls">
+        <button id="voice-listen" class="button primary mic-button" type="button"><span aria-hidden="true">●</span> Speak Japanese</button>
+        <button id="voice-translate" class="button" type="button">Translate spoken words</button>
+      </div>
+      <p id="voice-status" class="hint" role="status" aria-live="polite">Microphone access is requested when you tap Speak Japanese.</p>
+      <div class="voice-result-actions"><button id="voice-hear-japanese" class="text-button" type="button">Hear Japanese</button><button id="speak" class="text-button" type="button">Hear English</button></div>
+    </section>
+
+    <section id="write-section" class="panel" aria-labelledby="write-heading">
+      <div class="section-heading"><div><p class="eyebrow">02 · WRITE</p><h2 id="write-heading">Write or photograph kana</h2></div></div>
+      <p class="hint">The handwriting model reads hiragana. For katakana or kanji, type or correct the result below.</p>
+      <div class="draw-area">
+        <canvas id="drawing-pad" aria-label="Draw a Japanese character"></canvas>
+        <div class="draw-tools">
+          <button id="draw-color" class="button" type="button">Ink: black</button>
+          <button id="draw-eraser" class="button" type="button">Eraser</button>
+          <button id="draw-undo" class="button" type="button">Undo</button>
+          <button id="draw-clear" class="button" type="button">Clear</button>
+        </div>
+        <button id="read-drawing" class="button primary full-button" type="button">Read drawing</button>
+      </div>
+      <div class="divider-label"><span>or use a photo</span></div>
+      <label class="button upload-button">Take photo / choose image
         <input id="photo" type="file" accept="image/*" capture="environment">
       </label>
       <img id="preview" alt="Selected handwriting preview" hidden>
-      <button id="recognize" class="button" disabled>Read the kana</button>
-      <p id="status" class="status" role="status" aria-live="polite">Choose a photo to begin.</p>
+      <button id="recognize" class="button full-button" type="button" disabled>Read photo</button>
+
+      <div class="recognition-block">
+        <div class="section-heading compact-heading"><div><p class="eyebrow">CHECK THE READING</p><h3>Japanese text</h3></div></div>
+        <div id="readings" class="readings hint">Recognition suggestions will appear here.</div>
+        <label for="japanese">Edit the recognized text</label>
+        <input id="japanese" class="text-input japanese" type="text" lang="ja" autocomplete="off" placeholder="Type or correct Japanese">
+        <div class="actions"><button id="add" class="button" type="button" disabled>Add to phrase</button><button id="translate-line" class="button primary" type="button">Translate this line</button></div>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite">Draw a character or choose a photo to begin.</p>
     </section>
 
-    <section class="card" aria-labelledby="read-heading">
-      <h2 id="read-heading">2 · Check the reading</h2>
-      <div id="readings" class="readings hint">Your kana guesses will appear here.</div>
-      <label for="japanese">Japanese text · tap to correct</label>
-      <input id="japanese" class="text-input japanese" type="text" lang="ja" autocomplete="off" placeholder="Recognized kana">
-      <div class="actions"><button id="add" class="button" disabled>Add to phrase</button><button id="translate-line" class="button primary">Translate this line</button></div>
-    </section>
-
-    <section class="card" aria-labelledby="phrase-heading">
-      <h2 id="phrase-heading">3 · Translation studio</h2>
-      <p class="hint">Choose what you are translating: a word, phrase, sentence, or the recognized line.</p>
-      <label for="translation-type">Translation type</label>
+    <section class="panel" aria-labelledby="translate-heading">
+      <div class="section-heading"><div><p class="eyebrow">03 · TRANSLATE</p><h2 id="translate-heading">Build a phrase</h2></div></div>
+      <label for="translation-type">What are you translating?</label>
       <select id="translation-type" class="text-input type-select"><option value="word">Word</option><option value="phrase" selected>Phrase</option><option value="sentence">Sentence</option><option value="line">Recognized line</option></select>
-      <p class="hint">Captured kana</p><p id="phrase" class="phrase">(empty)</p>
-      <div class="actions"><button id="translate-phrase" class="button primary">Translate phrase</button><button id="undo" class="button">Undo</button><button id="clear" class="button">Clear</button></div>
-      <hr><p class="hint">English meaning</p><p id="english" class="english">Translation will appear here.</p>
-      <button id="speak" class="button">Speak English</button>
+      <p class="hint phrase-label">Your phrase</p><p id="phrase" class="phrase">(empty)</p>
+      <div class="actions"><button id="translate-phrase" class="button primary" type="button">Translate selection</button><button id="undo" class="button" type="button">Undo</button><button id="clear" class="button" type="button">Clear</button></div>
+      <div class="translation-result"><p class="eyebrow">ENGLISH MEANING</p><p id="english" class="english">Your translation will appear here.</p></div>
     </section>
-    <section class="card" aria-labelledby="vocab-heading">
-      <h2 id="vocab-heading">4 · Learn vocabulary by level</h2>
-      <p class="hint">Try a starter deck of common words at each study level. Cards work offline after the page loads.</p>
-      <label for="vocab-level">JLPT level</label>
+
+    <section id="learn-section" class="panel" aria-labelledby="vocab-heading">
+      <div class="section-heading"><div><p class="eyebrow">04 · LEARN</p><h2 id="vocab-heading">Vocabulary, one level at a time</h2></div></div>
+      <p class="hint">Starter cards with Japanese, reading, and meaning. Choose a study level.</p>
+      <label for="vocab-level">JLPT study level</label>
       <select id="vocab-level" class="text-input type-select"><option value="N5">N5 · Beginner</option><option value="N4">N4 · Elementary</option><option value="N3">N3 · Intermediate</option><option value="N2">N2 · Upper intermediate</option><option value="N1">N1 · Advanced</option></select>
-      <div id="vocab-card" class="vocab-card" aria-live="polite"><span id="vocab-level-label" class="vocab-level">N5</span><p id="vocab-word" class="vocab-word"></p><p id="vocab-reading" class="vocab-reading"></p><p id="vocab-meaning" class="vocab-meaning" hidden></p></div>
-      <p id="vocab-progress" class="hint">Card 1</p>
-      <div class="actions"><button id="vocab-reveal" class="button primary">Show meaning</button><button id="vocab-known" class="button">I knew it</button><button id="vocab-next" class="button">Next word</button></div>
+      <div class="vocab-card" aria-live="polite"><span id="vocab-level-label" class="level-chip">N5</span><p id="vocab-word" class="vocab-word"></p><p id="vocab-reading" class="vocab-reading"></p><p id="vocab-meaning" class="vocab-meaning" hidden></p></div>
+      <p id="vocab-progress" class="hint progress-copy">Card 1</p>
+      <div class="actions"><button id="vocab-reveal" class="button primary" type="button">Show meaning</button><button id="vocab-known" class="button" type="button">I knew it</button><button id="vocab-next" class="button" type="button">Next word</button></div>
     </section>
-    <footer>Mobile page uses this PC’s local model. Keep the PC and phone on the same Wi-Fi.</footer>
+    <footer>Remote practice works while this PC is online and the public practice link is running.</footer>
   </main>
 </body>
 </html>

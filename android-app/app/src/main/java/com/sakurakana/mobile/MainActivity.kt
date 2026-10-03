@@ -43,12 +43,13 @@ private data class InkStroke(val path: Path, val color: Int, val width: Float)
 private data class VocabularyCard(val word: String, val reading: String, val meaning: String)
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
-    private val pink = Color.rgb(217, 79, 131)
-    private val softPink = Color.rgb(253, 231, 240)
-    private val ink = Color.rgb(56, 34, 59)
-    private val muted = Color.rgb(128, 107, 122)
+    private val pink = Color.rgb(53, 89, 168)
+    private val softPink = Color.rgb(237, 242, 252)
+    private val ink = Color.rgb(32, 33, 36)
+    private val muted = Color.rgb(95, 99, 104)
     private val worker = Executors.newSingleThreadExecutor()
     private lateinit var serverField: EditText
+    private lateinit var accessCodeField: EditText
     private lateinit var status: TextView
     private lateinit var preview: ImageView
     private lateinit var reading: TextView
@@ -75,16 +76,19 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var pendingCameraUri: Uri? = null
     private var tts: TextToSpeech? = null
     private var isTranslating = false
+    private var drawingEraser = false
+    @Volatile private var requestAccessCode = ""
 
     companion object {
         private const val PICK_IMAGE = 1001
         private const val TAKE_PHOTO = 1002
+        private const val VOICE_INPUT = 1003
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.rgb(255, 246, 250)
-        window.navigationBarColor = Color.rgb(255, 246, 250)
+        window.statusBarColor = Color.WHITE
+        window.navigationBarColor = Color.WHITE
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         tts = TextToSpeech(this, this)
         buildScreen()
@@ -93,33 +97,35 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun buildScreen() {
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(255, 249, 252), Color.rgb(250, 229, 239), Color.rgb(255, 246, 250))
-            )
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(Color.WHITE) }
             setPadding(dp(18), dp(12), dp(18), dp(24))
         }
         val scroll = ScrollView(this).apply { isFillViewport = true; addView(page) }
         setContentView(scroll)
 
-        page.addView(text("✿  Sakura Kana", 30, pink, true).apply {
-            setShadowLayer(dp(5).toFloat(), 0f, dp(2).toFloat(), Color.rgb(235, 174, 198))
-        })
-        page.addView(text("Read, draw, and translate Japanese kana.", 15, muted))
+        page.addView(text("Japanese Practice", 27, ink, true))
+        page.addView(text("Read, speak, draw, and translate Japanese.", 15, muted))
 
         val connectCard = card()
         connectCard.addView(text("Connect to your PC", 19, ink, true))
-        connectCard.addView(text("On the PC, open Sakura Kana and tap “Start phone server”. Keep it running.", 14, muted))
+        connectCard.addView(text("Enter the address and PIN shown by the PC app. Use its temporary link to connect from any network.", 14, muted))
         serverField = EditText(this).apply {
             setSingleLine(true)
             textSize = 15f
-            setText("")
-            hint = "http://PC-address:5055"
+            setText(getSharedPreferences("connection", MODE_PRIVATE).getString("server_url", "").orEmpty())
+            hint = "https://...trycloudflare.com or http://PC-IP:5055"
             setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = rounded(Color.rgb(255, 251, 253), Color.rgb(240, 214, 225))
+            background = rounded(Color.WHITE, Color.rgb(217, 222, 232))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
         }
         connectCard.addView(serverField, matchWrap(top = 9))
+        accessCodeField = EditText(this).apply {
+            setSingleLine(true); textSize = 15f; hint = "Remote access PIN (leave blank for local Wi-Fi)"
+            setPadding(dp(12), dp(8), dp(12), dp(8)); background = rounded(Color.WHITE, Color.rgb(217, 222, 232))
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            val saved = getSharedPreferences("connection", MODE_PRIVATE).getString("access_code", "").orEmpty(); setText(saved)
+        }
+        connectCard.addView(accessCodeField, matchWrap(top = 8))
         connectCard.addView(button("Connect", true) { connectToPc() }, matchWrap(top = 9))
         status = text("Enter the PC server address and connect.", 13, muted)
         connectCard.addView(status, matchWrap(top = 7))
@@ -132,8 +138,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         drawCard.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(290)).apply { topMargin = dp(10) })
         val drawActions = horizontal()
         drawActions.addView(button("Blue / black", false) { pad.toggleColor() }, weightParams())
-        drawActions.addView(button("Undo", false) { pad.undo() }, weightParams(start = 7))
-        drawActions.addView(button("Clear", false) { pad.clear() }, weightParams(start = 7))
+        drawActions.addView(button("Eraser", false) { drawingEraser = !drawingEraser; pad.setEraser(drawingEraser); showStatus(if (drawingEraser) "Eraser selected." else "Pen selected.") }, weightParams(start = 5))
+        drawActions.addView(button("Undo", false) { pad.undo() }, weightParams(start = 5))
+        drawActions.addView(button("Clear", false) { pad.clear() }, weightParams(start = 5))
         drawCard.addView(drawActions, matchWrap(top = 8))
         drawCard.addView(button("Read drawing", true) {
             val crop = pad.inkCrop()
@@ -171,12 +178,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             hint = "Recognized kana — tap to correct"
             setSingleLine(true)
             setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = rounded(Color.rgb(255, 251, 253), Color.rgb(240, 214, 225))
+            background = rounded(Color.WHITE, Color.rgb(217, 222, 232))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
         }
         readCard.addView(japaneseField, matchWrap(top = 8))
         addPhraseButton = button("Add to phrase", true) { addToPhrase() }
         readCard.addView(addPhraseButton, matchWrap(top = 8))
+        readCard.addView(button("Speak Japanese", false) { startVoiceInput() }, matchWrap(top = 8))
         readCard.addView(button("Translate this line", false) { translate(japaneseField.text.toString()) }, matchWrap(top = 8))
         page.addView(readCard, matchWrap(top = 14))
 
@@ -213,7 +221,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(16), dp(16), dp(16), dp(16))
-            background = rounded(Color.rgb(255, 241, 247), Color.rgb(240, 214, 225), dp(14).toFloat())
+            background = rounded(Color.rgb(247, 249, 252), Color.rgb(225, 228, 234), dp(14).toFloat())
         }
         vocabWordView = text("水", 34, ink, true).apply { gravity = Gravity.CENTER }
         vocabReadingView = text("みず", 18, muted).apply { gravity = Gravity.CENTER }
@@ -245,6 +253,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun connectToPc() {
         val base = baseUrl()
+        requestAccessCode = accessCodeField.text.toString().trim()
+        getSharedPreferences("connection", MODE_PRIVATE).edit()
+            .putString("access_code", requestAccessCode).putString("server_url", base.orEmpty()).apply()
         if (base == null) { showStatus("Enter the PC address shown by the running server, such as http://192.168.1.24:5055", true); return }
         showStatus("Connecting to the PC…")
         worker.execute {
@@ -253,14 +264,26 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 connection.connectTimeout = 5000
                 connection.readTimeout = 5000
                 connection.requestMethod = "GET"
+                connection.instanceFollowRedirects = false
+                addAccessHeader(connection)
                 val ok = connection.responseCode in 200..299
                 connection.disconnect()
                 if (ok) runOnUiThread { showStatus("Connected. Draw a kana or take a photo.") }
                 else runOnUiThread { showStatus("PC responded, but the app page was unavailable.", true) }
             } catch (error: Exception) {
-                runOnUiThread { showStatus("Could not connect. Check the PC URL, Wi-Fi, and that Start phone server is running.", true) }
+                runOnUiThread { showStatus("Could not connect. Check the URL, PIN, and that the PC remote link is running.", true) }
             }
         }
+    }
+
+    private fun startVoiceInput() {
+        val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
+            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Speak Japanese")
+        }
+        try { startActivityForResult(intent, VOICE_INPUT) }
+        catch (_: Exception) { showStatus("No Japanese voice-recognition service is available on this phone.", true) }
     }
 
     private fun takePhoto() {
@@ -290,6 +313,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     @Deprecated("Legacy callback keeps this app dependency-free")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == VOICE_INPUT) {
+            if (resultCode == RESULT_OK) {
+                val spoken = data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+                if (spoken.isNotBlank()) { japaneseField.setText(spoken); reading.text = "Voice input · review or edit the recognized Japanese."; showStatus("Japanese speech recognized. Translate it or add it to your phrase.") }
+                else showStatus("No speech was recognized. Try again.", true)
+            } else showStatus("Voice input was cancelled.")
+            return
+        }
         val uri = if (requestCode == TAKE_PHOTO) pendingCameraUri else data?.data
         if (requestCode == TAKE_PHOTO) {
             pendingCameraUri?.let { imageUri ->
@@ -384,6 +415,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         connection.requestMethod = "POST"
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+        addAccessHeader(connection)
         connection.outputStream.use { out ->
             out.write("--$boundary\r\nContent-Disposition: form-data; name=\"image\"; filename=\"handwriting.png\"\r\nContent-Type: image/png\r\n\r\n".toByteArray())
             out.write(imageBytes)
@@ -454,6 +486,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 connection.requestMethod = "POST"
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                addAccessHeader(connection)
                 connection.outputStream.use { it.write(JSONObject().put("text", text).toString().toByteArray(Charsets.UTF_8)) }
                 val code = connection.responseCode
                 val body = (if (code in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
@@ -523,6 +556,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         nextVocabulary()
     }
 
+    private fun addAccessHeader(connection: HttpURLConnection) {
+        val code = requestAccessCode
+        if (code.isNotEmpty()) connection.setRequestProperty("X-Sakura-Access-Code", code)
+    }
+
     private fun baseUrl(): String? {
         val raw = serverField.text.toString().trim().trimEnd('/')
         return raw.takeIf { it.startsWith("http://") || it.startsWith("https://") }
@@ -555,8 +593,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         setPadding(dp(15), dp(14), dp(15), dp(14))
         background = android.graphics.drawable.GradientDrawable(
             android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-            intArrayOf(Color.WHITE, Color.rgb(255, 244, 249))
-        ).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), Color.rgb(249, 223, 235)) }
+            intArrayOf(Color.WHITE, Color.WHITE)
+        ).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), Color.rgb(225, 228, 234)) }
         elevation = dp(7).toFloat()
         translationZ = dp(2).toFloat()
     }
@@ -567,14 +605,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         text = label
         textSize = 14f
         isAllCaps = false
-        setTextColor(if (primary) Color.WHITE else Color.rgb(174, 53, 103))
+        setTextColor(if (primary) Color.WHITE else pink)
         background = android.graphics.drawable.GradientDrawable(
             android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-            if (primary) intArrayOf(Color.rgb(245, 132, 170), Color.rgb(188, 52, 108))
-            else intArrayOf(Color.WHITE, Color.rgb(248, 218, 231))
+            if (primary) intArrayOf(Color.rgb(61, 96, 174), Color.rgb(42, 70, 139))
+            else intArrayOf(Color.WHITE, Color.rgb(243, 246, 251))
         ).apply {
             cornerRadius = dp(10).toFloat()
-            setStroke(dp(1), if (primary) Color.rgb(255, 184, 207) else Color.rgb(239, 194, 212))
+            setStroke(dp(1), if (primary) Color.rgb(61, 96, 174) else Color.rgb(217, 222, 232))
         }
         minHeight = dp(48)
         setPadding(dp(8), dp(4), dp(8), dp(4))
@@ -615,6 +653,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         private val strokes = mutableListOf<InkStroke>()
         private var activePath: Path? = null
         private var penColor = Color.rgb(42, 59, 145)
+        private var isErasing = false
+        private var lastX = 0f
+        private var lastY = 0f
         private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; style = Paint.Style.FILL }
         private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(240, 214, 225); style = Paint.Style.STROKE; strokeWidth = dp(1).toFloat() }
@@ -625,16 +666,20 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             super.onDraw(canvas)
             canvas.drawRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), dp(10).toFloat(), dp(10).toFloat(), backgroundPaint)
             for (stroke in strokes) { strokePaint.color = stroke.color; strokePaint.strokeWidth = stroke.width; canvas.drawPath(stroke.path, strokePaint) }
-            activePath?.let { strokePaint.color = penColor; strokePaint.strokeWidth = dp(15).toFloat(); canvas.drawPath(it, strokePaint) }
+            activePath?.let { strokePaint.color = if (isErasing) Color.WHITE else penColor; strokePaint.strokeWidth = dp(if (isErasing) 28 else 15).toFloat(); canvas.drawPath(it, strokePaint) }
             canvas.drawRoundRect(RectF(1f, 1f, width - 1f, height - 1f), dp(10).toFloat(), dp(10).toFloat(), borderPaint)
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
             when (event.action) {
-                MotionEvent.ACTION_DOWN -> { activePath = Path().apply { moveTo(event.x, event.y) }; invalidate(); return true }
-                MotionEvent.ACTION_MOVE -> { activePath?.lineTo(event.x, event.y); invalidate(); return true }
+                MotionEvent.ACTION_DOWN -> { lastX = event.x; lastY = event.y; activePath = Path().apply { moveTo(lastX, lastY) }; invalidate(); return true }
+                MotionEvent.ACTION_MOVE -> {
+                    for (i in 0 until event.historySize) { val x = event.getHistoricalX(i); val y = event.getHistoricalY(i); activePath?.quadTo(lastX, lastY, (lastX + x) / 2f, (lastY + y) / 2f); lastX = x; lastY = y }
+                    activePath?.quadTo(lastX, lastY, (lastX + event.x) / 2f, (lastY + event.y) / 2f); lastX = event.x; lastY = event.y; invalidate(); return true
+                }
                 MotionEvent.ACTION_UP -> {
-                    activePath?.let { path -> strokes.add(InkStroke(Path(path), penColor, dp(15).toFloat())) }
+                    activePath?.lineTo(event.x, event.y)
+                    activePath?.let { path -> strokes.add(InkStroke(Path(path), if (isErasing) Color.WHITE else penColor, if (isErasing) dp(28).toFloat() else dp(15).toFloat())) }
                     activePath = null
                     invalidate()
                     performClick()
@@ -646,7 +691,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         override fun performClick(): Boolean { super.performClick(); return true }
 
-        fun toggleColor() { penColor = if (penColor == Color.BLACK) Color.rgb(42, 59, 145) else Color.BLACK; showStatus(if (penColor == Color.BLACK) "Pen: black." else "Pen: blue."); invalidate() }
+        fun setEraser(enabled: Boolean) { isErasing = enabled; invalidate() }
+        fun toggleColor() { isErasing = false; penColor = if (penColor == Color.BLACK) Color.rgb(42, 59, 145) else Color.BLACK; showStatus(if (penColor == Color.BLACK) "Pen: black." else "Pen: blue."); invalidate() }
         fun undo() { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex); invalidate() }
         fun clear() { strokes.clear(); activePath = null; invalidate() }
 

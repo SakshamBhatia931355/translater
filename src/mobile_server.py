@@ -1,9 +1,12 @@
 """LAN web interface for testing Kana Reader from a phone browser."""
 import argparse
+import hmac
 import io
+import os
+import secrets
 import sys
 from pathlib import Path
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 SRC_DIR = Path(__file__).resolve().parent
@@ -14,6 +17,42 @@ from translation import translate_japanese
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 12 * 1024 * 1024
+app.secret_key = secrets.token_bytes(32)
+ACCESS_CODE = ""
+
+
+@app.before_request
+def require_public_access_code():
+    if not ACCESS_CODE or request.endpoint in {"login", "health", "static"}:
+        return None
+    supplied = request.headers.get("X-Sakura-Access-Code", "")
+    if hmac.compare_digest(supplied, ACCESS_CODE):
+        return None
+    if session.get("sakura_authorized"):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify(error="Enter the access code shown on the PC."), 401
+    return redirect(url_for("login", next=request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    message = ""
+    if request.method == "POST":
+        submitted = request.form.get("code", "")
+        if ACCESS_CODE and hmac.compare_digest(submitted, ACCESS_CODE):
+            session["sakura_authorized"] = True
+            next_path = request.args.get("next", "/")
+            if not next_path.startswith("/") or next_path.startswith("//"):
+                next_path = "/"
+            return redirect(next_path)
+        message = "That access code did not match. Try again."
+    return render_template("login.html", message=message)
+
+
+@app.get("/health")
+def health():
+    return jsonify(ok=True, access_code_required=bool(ACCESS_CODE))
 
 
 @app.get("/")
@@ -62,7 +101,10 @@ def main():
     parser = argparse.ArgumentParser(description="Open Kana Reader on an Android phone over your local Wi-Fi.")
     parser.add_argument("--host", default="0.0.0.0", help="Network interface to bind (default: all local interfaces)")
     parser.add_argument("--port", type=int, default=5055)
+    parser.add_argument("--access-code", default=os.environ.get("SAKURA_ACCESS_CODE", ""))
     args = parser.parse_args()
+    global ACCESS_CODE
+    ACCESS_CODE = args.access_code.strip()
     print("Kana Reader mobile page: http://<this-PC's-LAN-IP>:%d" % args.port, flush=True)
     print("Keep this window open while testing from your phone.", flush=True)
     app.run(host=args.host, port=args.port, debug=False, threaded=True)

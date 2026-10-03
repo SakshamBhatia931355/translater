@@ -26,7 +26,7 @@ if "--webcam" in sys.argv:
 class KanaReaderApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Sakura Kana · Japanese practice")
+        self.root.title("Japanese Practice")
         self.root.geometry("940x760")
         self.root.minsize(760, 560)
         self._apply_sakura_theme()
@@ -41,8 +41,12 @@ class KanaReaderApp:
         self.current_phrase_range = None
         self.draw_strokes = []
         self.draw_active_stroke = None
+        self.draw_eraser = False
         self.draw_ink = "#2f4f9a"
         self.mobile_server_process = None
+        self.public_server_process = None
+        self._public_url = None
+        self._public_code = None
         self.speech = queue.Queue()
         self.ui_tasks = queue.Queue()
 
@@ -64,7 +68,7 @@ class KanaReaderApp:
         self.root.bind_all("<Next>", lambda _event: self.scroll_canvas.yview_scroll(1, "page"))
         header = ttk.Frame(outer, style="App.TFrame")
         header.pack(fill="x", pady=(0, 16))
-        ttk.Label(header, text="✿  Sakura Kana", style="Hero.TLabel").pack(anchor="w")
+        ttk.Label(header, text="Japanese Practice", style="Hero.TLabel").pack(anchor="w")
         ttk.Label(header, text="Read Japanese, build a phrase, and hear what it means.", style="Subtitle.TLabel").pack(anchor="w", pady=(3, 0))
 
         actions = ttk.Frame(outer, style="Card.TFrame", padding=(14, 11))
@@ -78,6 +82,8 @@ class KanaReaderApp:
         ttk.Entry(actions, textvariable=self.camera_index, width=4, justify="center").pack(side="left")
         self.phone_button = ttk.Button(actions, text="Start phone server", style="Soft.TButton", command=self.toggle_mobile_server)
         self.phone_button.pack(side="left", padx=(14, 0))
+        self.public_button = ttk.Button(actions, text="Start anywhere link", style="Soft.TButton", command=self.toggle_public_server)
+        self.public_button.pack(side="left", padx=(8, 0))
 
         body = ttk.Frame(outer, style="App.TFrame")
         body.pack(fill="both", expand=True)
@@ -96,6 +102,8 @@ class KanaReaderApp:
         draw_actions = ttk.Frame(preview_card, style="Card.TFrame")
         draw_actions.pack(fill="x", pady=(7, 0))
         ttk.Button(draw_actions, text="Clear drawing", style="Soft.TButton", command=self.clear_drawing).pack(side="left")
+        self.draw_eraser_button = ttk.Button(draw_actions, text="Eraser", style="Soft.TButton", command=self.toggle_draw_eraser)
+        self.draw_eraser_button.pack(side="left", padx=6)
         self.draw_color_button = ttk.Button(draw_actions, text="Use black ink", style="Soft.TButton", command=self.toggle_draw_color)
         self.draw_color_button.pack(side="left", padx=6)
         self.draw_recognize_button = ttk.Button(draw_actions, text="Read drawing", style="Primary.TButton", command=self.recognize_drawing)
@@ -172,9 +180,9 @@ class KanaReaderApp:
         threading.Thread(target=self._speech_worker, daemon=True, name="SakuraKanaSpeech").start()
 
     def _apply_sakura_theme(self):
-        self.colors = {"bg": "#fff7fa", "card": "#ffffff", "ink": "#452a3c", "muted": "#806879",
-                       "pink": "#d95f8d", "pink_hover": "#bd4774", "soft": "#ffe7ef", "border": "#f0d5e0",
-                       "preview": "#fffafd", "status": "#ffedf3"}
+        self.colors = {"bg": "#ffffff", "card": "#ffffff", "ink": "#202124", "muted": "#5f6368",
+                       "pink": "#3559a8", "pink_hover": "#24458f", "soft": "#edf2fc", "border": "#d9dee8",
+                       "preview": "#fbfcfe", "status": "#f2f5fa"}
         self.root.configure(background=self.colors["bg"])
         style = ttk.Style(self.root)
         try:
@@ -318,23 +326,32 @@ class KanaReaderApp:
         self.phrase_text.set("".join(character for character, _ in self.phrase) or "(empty)")
 
     def _draw_start(self, event):
+        color = "#ffffff" if self.draw_eraser else self.draw_ink
         self.draw_active_stroke = [(event.x, event.y)]
-        self.draw_strokes.append((self.draw_ink, self.draw_active_stroke))
-        radius = 2
+        self.draw_strokes.append((color, self.draw_active_stroke))
+        radius = 9 if self.draw_eraser else 2
         self.draw_canvas.create_oval(event.x-radius, event.y-radius, event.x+radius, event.y+radius,
-                                     fill=self.draw_ink, outline=self.draw_ink, tags="ink")
+                                     fill=color, outline=color, tags="ink")
 
     def _draw_move(self, event):
         if self.draw_active_stroke is None:
             return
         points = self.draw_active_stroke
-        previous = points[-1]
+        color = "#ffffff" if self.draw_eraser else self.draw_ink
         points.append((event.x, event.y))
-        self.draw_canvas.create_line(*previous, event.x, event.y, fill=self.draw_ink, width=4,
-                                     capstyle=tk.ROUND, joinstyle=tk.ROUND, tags="ink")
+        flat = [coordinate for point in points for coordinate in point]
+        self.draw_canvas.delete("active-ink")
+        self.draw_canvas.create_line(*flat, fill=color, width=18 if self.draw_eraser else 5,
+                                     capstyle=tk.ROUND, joinstyle=tk.ROUND, smooth=True, splinesteps=36,
+                                     tags=("ink", "active-ink"))
 
     def _draw_end(self, _event):
         self.draw_active_stroke = None
+
+    def toggle_draw_eraser(self):
+        self.draw_eraser = not self.draw_eraser
+        self.draw_eraser_button.configure(text="Pen" if self.draw_eraser else "Eraser")
+        self.status.set("Eraser selected." if self.draw_eraser else "Pen selected.")
 
     def clear_drawing(self):
         self.draw_strokes.clear()
@@ -356,13 +373,14 @@ class KanaReaderApp:
         painter = ImageDraw.Draw(image)
         for color, points in self.draw_strokes:
             ink = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))
+            stroke_width = 18 if color.lower() == "#ffffff" else 9
             if len(points) == 1:
                 x, y = points[0]
-                radius = 5
+                radius = stroke_width // 2
                 painter.ellipse((x-radius, y-radius, x+radius, y+radius), fill=ink)
             else:
-                painter.line(points, fill=ink, width=8, joint="curve")
-                radius = 4
+                painter.line(points, fill=ink, width=stroke_width, joint="curve")
+                radius = stroke_width // 2
                 for x, y in (points[0], points[-1]):
                     painter.ellipse((x-radius, y-radius, x+radius, y+radius), fill=ink)
         self.current_phrase_range = None
@@ -585,7 +603,7 @@ class KanaReaderApp:
             # A manually started server may already be available; reuse it.
             with urllib.request.urlopen("http://127.0.0.1:5055/", timeout=1):
                 self.status.set(f"Phone server is already running. On your phone open {url}")
-                messagebox.showinfo("Sakura Kana on Android", f"Connect the phone to the same Wi-Fi and open:\n\n{url}\n\nKeep this app open while testing.")
+                messagebox.showinfo("Japanese Practice on your phone", f"Connect the phone to the same Wi-Fi and open:\n\n{url}\n\nKeep this app open while testing.")
                 return
         except Exception:
             pass
@@ -618,7 +636,81 @@ class KanaReaderApp:
             self.status.set("Phone server stopped unexpectedly. Check Flask is installed in .venv.")
             return
         self.status.set(f"Phone server running. On Android open {url}")
-        messagebox.showinfo("Sakura Kana on Android", f"Connect the phone to the same Wi-Fi and open:\n\n{url}\n\nKeep this app open while testing.")
+        messagebox.showinfo("Japanese Practice on your phone", f"Connect the phone to the same Wi-Fi and open:\n\n{url}\n\nKeep this app open while testing.")
+
+    def toggle_public_server(self):
+        process = self.public_server_process
+        if process is not None and process.poll() is None:
+            self._stop_process_tree(process)
+            self.public_server_process = None
+            self.public_button.configure(text="Start anywhere link")
+            self._public_url = self._public_code = None
+            self.status.set("Remote link stopped.")
+            return
+        try:
+            project_root = (Path(sys.executable).resolve().parents[2]
+                            if getattr(sys, "frozen", False)
+                            else Path(__file__).resolve().parents[1])
+            launcher = project_root / "src" / "start_public_server.py"
+            python = project_root / ".venv" / "Scripts" / "python.exe"
+            if not launcher.exists() or not python.exists():
+                raise FileNotFoundError("The app needs src/start_public_server.py and the project .venv. Run it from the translater project folder.")
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+            self.public_server_process = subprocess.Popen(
+                [str(python), str(launcher)], cwd=project_root, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+                bufsize=1, creationflags=flags)
+            self.public_button.configure(text="Stop anywhere link")
+            self.status.set("Starting secure remote link. The first start downloads Cloudflare Tunnel.")
+            threading.Thread(target=self._read_public_server_output,
+                             args=(self.public_server_process,), daemon=True, name="PublicLinkReader").start()
+        except Exception as exc:
+            messagebox.showerror("Could not start remote link", str(exc))
+            self.status.set(f"Could not start remote link: {exc}")
+
+    def _read_public_server_output(self, process):
+        if process.stdout is None:
+            return
+        for line in process.stdout:
+            line = line.strip()
+            if line.startswith("PUBLIC_URL="):
+                self._public_url = line.partition("=")[2]
+            elif line.startswith("ACCESS_CODE="):
+                self._public_code = line.partition("=")[2]
+            elif line.startswith("ERROR="):
+                self.ui_tasks.put((self._public_link_error, (line.partition("=")[2],)))
+            if self._public_url and self._public_code:
+                url, code = self._public_url, self._public_code
+                self._public_url = self._public_code = None
+                self.ui_tasks.put((self._show_public_link, (url, code)))
+                break
+
+    def _show_public_link(self, url, code):
+        if self._closing:
+            return
+        self.status.set("Remote link active. This PC must stay on and online.")
+        messagebox.showinfo("Phone link ready", f"Open this link on your phone:\n\n{url}\n\nAccess code: {code}\n\nKeep this PC and the app running. The temporary link can change when restarted.")
+
+    def _public_link_error(self, message):
+        if self._closing:
+            return
+        self.public_button.configure(text="Start anywhere link")
+        self.public_server_process = None
+        self.status.set(f"Remote link stopped: {message}")
+        messagebox.showerror("Remote link could not start", message)
+
+    @staticmethod
+    def _stop_process_tree(process):
+        if process.poll() is not None:
+            return
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+            else:
+                process.terminate()
+        except Exception:
+            process.kill()
 
     def _check_camera_start(self, process, index):
         if self._closing:
@@ -633,6 +725,9 @@ class KanaReaderApp:
     def close(self):
         self._closing = True
         self.speech.put(None)
+        for process in (self.mobile_server_process, self.public_server_process):
+            if process is not None:
+                self._stop_process_tree(process)
         self.root.destroy()
 
 

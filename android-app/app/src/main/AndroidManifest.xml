@@ -3,7 +3,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:allowBackup="false"
-        android:label="Sakura Kana"
+        android:label="Japanese Practice"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
         <activity
