@@ -2,7 +2,7 @@
 import argparse, hashlib, hmac, io, json, os, secrets, sys, time, uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 SRC_DIR=Path(__file__).resolve().parent
@@ -11,6 +11,7 @@ if str(SRC_DIR) not in sys.path: sys.path.insert(0,str(SRC_DIR))
 from predict import predict_line
 from translation import translate_japanese
 import learning_store as store
+from learning_store import kana_to_romaji
 from learning_content import LESSONS, SCENARIOS
 from conversation_provider import ProviderUnavailable, generate_tutor_turn, tutor_configured
 
@@ -86,6 +87,13 @@ def health(): return jsonify(ok=True,access_code_required=bool(ACCESS_CODE))
 @app.get("/")
 def index(): return render_template("mobile.html")
 
+@app.get("/service-worker.js")
+def service_worker():
+    response=send_from_directory(SRC_DIR/"static","service-worker.js",mimetype="application/javascript")
+    response.headers["Service-Worker-Allowed"]="/"
+    response.headers["Cache-Control"]="no-cache"
+    return response
+
 @app.post("/api/recognize")
 def recognize():
     photo=request.files.get("image")
@@ -108,6 +116,7 @@ def translate():
     try: translated=translate_japanese(text)
     except (FileNotFoundError,OSError,RuntimeError) as exc: return jsonify(error=str(exc)),503
     store.log_activity("translation",0,{"characters":len(text)})
+    store.save_translation(text,translated)
     return jsonify(translation=translated)
 
 @app.get("/api/v1/capabilities")
@@ -130,6 +139,34 @@ def profile_put():
 @app.get("/api/v1/dashboard")
 def dashboard(): return jsonify(store.dashboard())
 
+@app.get("/api/v1/translations")
+def translation_history(): return jsonify(items=store.translation_history())
+
+@app.post("/api/v1/phrases")
+def phrase_save():
+    payload=request.get_json(silent=True) or {}
+    try: return jsonify(item=store.save_phrase(payload.get("text",""),payload.get("translation",""),payload.get("label",""))),201
+    except ValueError as exc: return jsonify(error=str(exc)),400
+
+@app.get("/api/v1/phrases")
+def phrases_list(): return jsonify(items=store.list_saved_phrases())
+
+@app.delete("/api/v1/phrases/<int:phrase_id>")
+def phrase_delete(phrase_id):
+    if not store.delete_saved_phrase(phrase_id): return jsonify(error="Saved phrase not found."),404
+    return jsonify(ok=True)
+
+@app.post("/api/v1/writing")
+def writing_save():
+    payload=request.get_json(silent=True) or {}
+    if not isinstance(payload.get("strokes",[]),list): return jsonify(error="Drawing strokes must be a list."),400
+    try: attempt_id=store.save_writing_attempt(payload.get("prompt",""),payload.get("predicted",""),payload.get("confidence",0),payload.get("strokes",[]))
+    except (ValueError,TypeError) as exc: return jsonify(error=str(exc)),400
+    return jsonify(id=attempt_id),201
+
+@app.get("/api/v1/writing")
+def writing_list(): return jsonify(items=store.writing_history())
+
 @app.post("/api/v1/study/tick")
 def study_tick():
     learner=session.get("learner_session")
@@ -141,14 +178,17 @@ def study_tick():
 @app.get("/api/v1/lessons")
 def lessons_list():
     status=store.lesson_statuses(); level=request.args.get("level")
-    data=[{**item,"progress":status.get(item["id"],{"attempts":0,"best_score":0,"completed":False})} for item in LESSONS if not level or item["level"]==level]
+    data=[{**lesson_payload(item),"progress":status.get(item["id"],{"attempts":0,"best_score":0,"completed":False})} for item in LESSONS if not level or item["level"]==level]
     return jsonify(lessons=data,source_note="Curated starter content; not official JLPT course material.")
+
+def lesson_payload(lesson):
+    return {**lesson,"examples":[{**example,"romaji":example.get("romaji") or kana_to_romaji(example.get("reading",""))} for example in lesson["examples"]]}
 
 @app.get("/api/v1/lessons/<lesson_id>")
 def lesson_get(lesson_id):
     lesson=LESSON_MAP.get(lesson_id)
     if not lesson: return jsonify(error="Lesson not found."),404
-    return jsonify(lesson=lesson,progress=store.lesson_statuses().get(lesson_id,{"attempts":0,"best_score":0,"completed":False}))
+    return jsonify(lesson=lesson_payload(lesson),progress=store.lesson_statuses().get(lesson_id,{"attempts":0,"best_score":0,"completed":False}))
 
 @app.post("/api/v1/lessons/<lesson_id>/complete")
 def lesson_complete(lesson_id):
@@ -179,6 +219,17 @@ def vocabulary_review(vocabulary_id):
     except LookupError as exc: return jsonify(error=str(exc)),404
     except ValueError as exc: return jsonify(error=str(exc)),400
 
+@app.post("/api/v1/vocabulary/quiz")
+def vocabulary_quiz():
+    payload=request.get_json(silent=True) or {}
+    if not isinstance(payload.get("correct"),bool): return jsonify(error="Quiz result must be true or false."),400
+    try: vocabulary_id=int(payload.get("vocabulary_id"))
+    except (TypeError,ValueError): return jsonify(error="Choose a vocabulary card."),400
+    with store.db() as c: card=c.execute("SELECT id FROM vocabulary WHERE id=?",(vocabulary_id,)).fetchone()
+    if not card: return jsonify(error="Vocabulary card not found."),404
+    store.log_vocabulary_quiz(payload["correct"],vocabulary_id)
+    return jsonify(saved=True)
+
 @app.post("/api/v1/vocabulary")
 def vocabulary_add():
     payload=request.get_json(silent=True)
@@ -202,10 +253,10 @@ def export_data():
 def delete_local_data():
     # Retain schema and vocabulary, but remove learner content and reset preferences.
     with store.db() as c:
-        for table in ("activity","lesson_progress","reviews","conversations","study_timer"): c.execute("DELETE FROM "+table)
+        for table in ("activity","lesson_progress","reviews","conversations","study_timer","translation_history","saved_phrases","writing_attempts"): c.execute("DELETE FROM "+table)
         c.execute("DELETE FROM vocabulary WHERE custom=1")
         c.execute("UPDATE vocabulary SET bookmarked=0")
-        c.execute("UPDATE profile SET display_name='',display_language='en',jlpt_level='N5',learning_goal='general',daily_minutes=10,hiragana_familiar=0,katakana_familiar=0,kanji_familiar=0,practice_style='balanced',onboarding_complete=0,updated_at=? WHERE id=1",(store.stamp(),))
+        c.execute("UPDATE profile SET display_name='',display_language='en',jlpt_level='N5',learning_goal='general',daily_minutes=10,hiragana_familiar=0,katakana_familiar=0,kanji_familiar=0,practice_style='balanced',furigana_enabled=1,romaji_enabled=0,audio_speed=1.0,theme='light',onboarding_complete=0,updated_at=? WHERE id=1",(store.stamp(),))
     session.clear(); return jsonify(ok=True)
 
 @app.get("/api/v1/conversations/scenarios")
@@ -248,7 +299,7 @@ def conversation_turn(conversation_id):
         user_msg={"speaker":"user","text":learner,"created_at":store.stamp()}
         tutor_msg={"speaker":"assistant","text":tutor_text,"translation":result["reply_en"],"correction":result["correction_ja"],"explanation":result["explanation_en"],"new_words":result["new_words"],"created_at":store.stamp()}
         messages.extend([user_msg,tutor_msg]); turns=row["turns"]+1; idx=0
-        suggestions=scenario["turns"][0]["suggestions"]
+        suggestions=result.get("suggestions") or scenario["turns"][0]["suggestions"]
         with store.db() as c: c.execute("UPDATE conversations SET turns=?,updated_at=?,messages=? WHERE id=?",(turns,store.stamp(),json.dumps(messages,ensure_ascii=False),conversation_id))
         store.log_activity("conversation_turn",0,{"scenario_id":scenario["id"]})
         return jsonify(mode="ai",message=tutor_msg,suggestions=suggestions,turns=turns)
@@ -274,7 +325,12 @@ def conversation_finish(conversation_id):
         with store.db() as c: c.execute("UPDATE conversations SET completed=1,updated_at=? WHERE id=?",(store.stamp(),conversation_id))
         store.log_activity("conversation_completed",elapsed,{"scenario_id":row["scenario_id"],"turns":row["turns"],"mode":row["mode"]})
     scenario=SCENARIO_MAP[row["scenario_id"]]
-    return jsonify(completed=True,scenario=scenario["title"],turns=row["turns"],mode=row["mode"],vocabulary=scenario["vocabulary"],feedback_note=("Scripted guided practice; no free-text grammar or pronunciation assessment was performed." if row["mode"]=="guided" else "Pronunciation was not scored. Review the tutor's text corrections and vocabulary."))
+    messages=json.loads(row["messages"]); corrections=[{"text":m.get("text",""),"correction":m.get("correction",""),"explanation":m.get("explanation","")} for m in messages if m.get("speaker")=="assistant" and m.get("correction")]
+    learned=[]
+    for msg in messages:
+        for word in msg.get("new_words",[]):
+            if word not in learned: learned.append(word)
+    return jsonify(completed=True,scenario=scenario["title"],turns=row["turns"],mode=row["mode"],vocabulary=learned or scenario["vocabulary"],corrections=corrections,summary=f"You practiced {scenario['title'].lower()} and completed {row['turns']} learner turns.",next_practice="Review the expressions you want to remember, then try another scene.",feedback_note=("Scripted guided practice; no free-text grammar or pronunciation assessment was performed." if row["mode"]=="guided" else "Pronunciation was not scored. Review the tutor's text corrections and vocabulary."))
 
 @app.get("/api/v1/conversations")
 def conversation_history():

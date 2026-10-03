@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import urllib.request
+import webbrowser
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -40,7 +41,9 @@ class KanaReaderApp:
         self.phrase = []
         self.current_phrase_range = None
         self.draw_strokes = []
+        self.draw_redo_strokes = []
         self.draw_active_stroke = None
+        self.draw_brush_size = tk.DoubleVar(value=5)
         self.draw_eraser = False
         self.draw_ink = "#2f4f9a"
         self.mobile_server_process = None
@@ -82,6 +85,8 @@ class KanaReaderApp:
         ttk.Entry(actions, textvariable=self.camera_index, width=4, justify="center").pack(side="left")
         self.phone_button = ttk.Button(actions, text="Start phone server", style="Soft.TButton", command=self.toggle_mobile_server)
         self.phone_button.pack(side="left", padx=(14, 0))
+        self.learning_button = ttk.Button(actions, text="Open learning site", style="Soft.TButton", command=self.open_learning_site)
+        self.learning_button.pack(side="left", padx=(8, 0))
         self.public_button = ttk.Button(actions, text="Start anywhere link", style="Soft.TButton", command=self.toggle_public_server)
         self.public_button.pack(side="left", padx=(8, 0))
 
@@ -104,6 +109,10 @@ class KanaReaderApp:
         ttk.Button(draw_actions, text="Clear drawing", style="Soft.TButton", command=self.clear_drawing).pack(side="left")
         self.draw_eraser_button = ttk.Button(draw_actions, text="Eraser", style="Soft.TButton", command=self.toggle_draw_eraser)
         self.draw_eraser_button.pack(side="left", padx=6)
+        ttk.Label(draw_actions, text="Brush", style="CardMuted.TLabel").pack(side="left", padx=(8, 3))
+        ttk.Scale(draw_actions, variable=self.draw_brush_size, from_=3, to=16, length=90).pack(side="left")
+        ttk.Button(draw_actions, text="Undo", style="Soft.TButton", command=self.undo_drawing).pack(side="left", padx=6)
+        ttk.Button(draw_actions, text="Redo", style="Soft.TButton", command=self.redo_drawing).pack(side="left")
         self.draw_color_button = ttk.Button(draw_actions, text="Use black ink", style="Soft.TButton", command=self.toggle_draw_color)
         self.draw_color_button.pack(side="left", padx=6)
         self.draw_recognize_button = ttk.Button(draw_actions, text="Read drawing", style="Primary.TButton", command=self.recognize_drawing)
@@ -327,9 +336,11 @@ class KanaReaderApp:
 
     def _draw_start(self, event):
         color = "#ffffff" if self.draw_eraser else self.draw_ink
+        self.draw_redo_strokes.clear()
         self.draw_active_stroke = [(event.x, event.y)]
-        self.draw_strokes.append((color, self.draw_active_stroke))
-        radius = 9 if self.draw_eraser else 2
+        width = max(3, int(self.draw_brush_size.get() * (2.5 if self.draw_eraser else 1)))
+        self.draw_strokes.append((color, self.draw_active_stroke, width))
+        radius = width // 2
         self.draw_canvas.create_oval(event.x-radius, event.y-radius, event.x+radius, event.y+radius,
                                      fill=color, outline=color, tags="ink")
 
@@ -341,7 +352,8 @@ class KanaReaderApp:
         points.append((event.x, event.y))
         flat = [coordinate for point in points for coordinate in point]
         self.draw_canvas.delete("active-ink")
-        self.draw_canvas.create_line(*flat, fill=color, width=18 if self.draw_eraser else 5,
+        width = max(3, int(self.draw_brush_size.get() * (2.5 if self.draw_eraser else 1)))
+        self.draw_canvas.create_line(*flat, fill=color, width=width,
                                      capstyle=tk.ROUND, joinstyle=tk.ROUND, smooth=True, splinesteps=36,
                                      tags=("ink", "active-ink"))
 
@@ -355,9 +367,31 @@ class KanaReaderApp:
 
     def clear_drawing(self):
         self.draw_strokes.clear()
+        self.draw_redo_strokes.clear()
         self.draw_active_stroke = None
         self.draw_canvas.delete("ink")
         self.status.set("Drawing cleared.")
+
+    def undo_drawing(self):
+        if self.draw_strokes:
+            self.draw_redo_strokes.append(self.draw_strokes.pop())
+            self._redraw_drawing()
+
+    def redo_drawing(self):
+        if self.draw_redo_strokes:
+            self.draw_strokes.append(self.draw_redo_strokes.pop())
+            self._redraw_drawing()
+
+    def _redraw_drawing(self):
+        self.draw_canvas.delete("ink")
+        for color, points, width in self.draw_strokes:
+            if len(points) == 1:
+                x, y = points[0]; radius = max(1, width // 2)
+                self.draw_canvas.create_oval(x-radius, y-radius, x+radius, y+radius, fill=color, outline=color, tags="ink")
+            elif points:
+                flat = [coordinate for point in points for coordinate in point]
+                self.draw_canvas.create_line(*flat, fill=color, width=width, capstyle=tk.ROUND,
+                                             joinstyle=tk.ROUND, smooth=True, splinesteps=36, tags="ink")
 
     def toggle_draw_color(self):
         self.draw_ink = "#171717" if self.draw_ink != "#171717" else "#2f4f9a"
@@ -371,9 +405,8 @@ class KanaReaderApp:
         height = max(1, self.draw_canvas.winfo_height())
         image = Image.new("RGB", (width, height), "white")
         painter = ImageDraw.Draw(image)
-        for color, points in self.draw_strokes:
+        for color, points, stroke_width in self.draw_strokes:
             ink = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))
-            stroke_width = 18 if color.lower() == "#ffffff" else 9
             if len(points) == 1:
                 x, y = points[0]
                 radius = stroke_width // 2
@@ -628,6 +661,14 @@ class KanaReaderApp:
         except Exception as exc:
             messagebox.showerror("Could not start phone server", str(exc))
             self.status.set(f"Could not start phone server: {exc}")
+
+    def open_learning_site(self):
+        """Start the shared Flask backend if needed and open its local learning UI."""
+        try:
+            self.toggle_mobile_server()
+            self.root.after(1200, lambda: webbrowser.open("http://127.0.0.1:5055/"))
+        except Exception as exc:
+            self.status.set(f"Could not open the learning site: {exc}")
 
     def _show_phone_server(self, url):
         process = self.mobile_server_process

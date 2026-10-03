@@ -74,11 +74,11 @@ Start the responsive learning site and API on this PC:
 
     .\.venv\Scripts\python.exe src\mobile_server.py
 
-Open `http://127.0.0.1:5055` on the PC, or use the PC's local Wi-Fi address on a phone. The new web learning area has an optional profile setup, daily study dashboard, curated starter lessons, lesson attempts, learner-created vocabulary, spaced reviews, guided role-play, drawing/photo practice, progress summaries, and JSON export/reset. Learning records live in `instance\japanese_practice.sqlite3`; they are local to this PC and shared by visitors to this server. It is a single-learner local profile, not a multi-user account service.
+Open `http://127.0.0.1:5055` on the PC, or use the PC's local Wi-Fi address on a phone. The learning area has profile setup, a daily dashboard, short curated starters at N5 through N1, saved quiz answers, vocabulary cards and quizzes, spaced reviews, guided role-play, translation history, saved phrases, drawing/photo practice with stroke history, progress summaries, and JSON export/reset. Records live in `instance\japanese_practice.sqlite3`; this is a local single-learner profile shared by visitors to this server, not a multi-user account service.
 
 The role-play is visibly labelled **Guided** when no AI credentials are configured. Those scenes accept suggested responses and do not grade arbitrary sentences. To enable the optional server-side OpenAI text tutor, set `OPENAI_API_KEY` in this PC's environment before starting the server; optionally set `OPENAI_MODEL` to a model available to your account. The key is read on the PC and is not embedded in the browser or APK. Without the key, the rest of the learning site still works. AI-provider behavior has not been validated here because no key was supplied.
 
-The starter lesson library currently contains a small set of curated N5 lessons, not a full N5–N1 sequence. The native Android app retains its camera/drawing/translation tools and now includes a button to open this full learning site in the phone browser. Browser speech recognition depends on the browser and device; no pronunciation scoring is implemented. Handwriting photo recognition remains hiragana-only; correct the reading or type kanji/katakana before translating.
+The lesson library is a small curated practice set (8 N5 lessons and 2 at each of N4–N1), not a complete JLPT curriculum. The native Android app retains its camera/drawing/translation tools and includes a button to open the shared learning site in the phone browser. Browser speech recognition depends on the browser and device; no pronunciation scoring is implemented. Handwriting photo recognition remains hiragana-only; correct the reading or type kanji/katakana before translating. The installable web shell can show an offline notice; lessons, translation, recognition, and saved data still require the PC server.
 
 Run the API regression checks from the project root:
 
@@ -137,6 +137,6 @@ The database is copyrighted by AIST and may be used for free under its Terms of 
     src/translation.py          GPU-capable local Japanese-to-English model
     src/setup_translation.py    download offline Japanese-to-English weights
 
-## Windows executable
+## Windows launcher
 
-The bundled Windows executable is not included because it is several gigabytes and contains a PC-specific CUDA/PyTorch runtime. Run the desktop app from the locally created Python environment as shown above, or build the executable on the target PC after setup. The PyInstaller specifications are included in the repository.
+`artifacts\KotobaPractice.exe` is a small click-to-run launcher for this project's local `.venv`; it does not bundle Python, PyTorch, or the model files. Clone the project and complete the setup above on the target PC first, then double-click the launcher. It starts `src\desktop_app.py` with the environment in that project folder. The full recognition and translation models remain on the PC. The older large, self-contained distribution is not published because it is several gigabytes and machine-specific. Rebuild the small launcher with `.\.venv\Scripts\python.exe -m PyInstaller --noconfirm --distpath artifacts --workpath build\kotoba-launcher KotobaPractice.spec`.
